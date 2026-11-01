@@ -216,7 +216,7 @@ export function buildGrowthAnalysis(
     {
       id: "mid-parent",
       label: "Elterngröße (Tanner)",
-      description: "Genetische Zielgröße, nur aus der Größe der Eltern",
+      description: null,
       value: hasParents ? midParentTargetHeight(sex, mother_height_cm, father_height_cm) : null,
       range: MID_PARENT_RANGE_CM,
       basisDate: null,
