@@ -11,6 +11,7 @@ import {
 } from "@/lib/data";
 import { formatTestDate } from "@/lib/format";
 import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
+import { formatPercentile, heightPercentile } from "@/lib/growth/percentiles";
 import { predictionColors } from "@/lib/growth/colors";
 import { armSpanRatio } from "@/lib/growth/proportions";
 import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
@@ -111,6 +112,10 @@ export function AthleteGrowthPage() {
   }
 
   const profile = profileQuery.data;
+  const currentPercentile =
+    profile && analysis?.latest
+      ? heightPercentile(profile.sex, analysis.latest.age, analysis.latest.height_cm)
+      : null;
   const measurementsDesc = analysis ? [...analysis.points].reverse() : [];
 
   return (
@@ -133,6 +138,9 @@ export function AthleteGrowthPage() {
                 : ""}
               {profile?.mother_height_cm && profile.father_height_cm
                 ? ` · Eltern ${formatNumber(profile.mother_height_cm)} / ${formatNumber(profile.father_height_cm)} cm`
+                : ""}
+              {currentPercentile !== null
+                ? ` · Größe P${formatPercentile(currentPercentile)} (KiGGS)`
                 : ""}
             </p>
           </div>
@@ -250,6 +258,7 @@ export function AthleteGrowthPage() {
               points={analysis.points}
               predictions={analysis.predictions}
               projection={analysis.projection}
+              sex={profile.sex}
             />
             <p className="mt-3 text-xs text-foreground/50">
               Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm).

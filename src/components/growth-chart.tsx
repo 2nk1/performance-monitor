@@ -1,4 +1,5 @@
 import {
+  Area,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -9,7 +10,9 @@ import {
   YAxis,
 } from "recharts";
 import type { GrowthPoint, Prediction } from "@/lib/growth/analysis";
+import { referenceCurve } from "@/lib/growth/percentiles";
 import type { ProjectionPoint } from "@/lib/growth/projection";
+import type { GrowthSex } from "@/lib/types";
 import { predictionColors } from "@/lib/growth/colors";
 import { getSeriesColor } from "@/lib/series-colors";
 
@@ -19,12 +22,13 @@ type GrowthChartProps = {
   points: GrowthPoint[];
   predictions: Prediction[];
   projection: ProjectionPoint[] | null;
+  sex: GrowthSex;
 };
 
 const formatAge = (age: number) => `${age.toFixed(1).replace(".", ",")} J.`;
 const formatCm = (value: number) => `${value.toFixed(1).replace(".", ",")} cm`;
 
-export function GrowthChart({ points, predictions, projection }: GrowthChartProps) {
+export function GrowthChart({ points, predictions, projection, sex }: GrowthChartProps) {
   if (points.length === 0) {
     return (
       <div className="flex h-72 items-center justify-center rounded-xl border border-card-border bg-card text-sm text-foreground/60">
@@ -45,7 +49,10 @@ export function GrowthChart({ points, predictions, projection }: GrowthChartProp
     Math.ceil(projection?.at(-1)?.age ?? 0) + 0.5,
   );
 
+  const reference = referenceCurve(sex, xMin, xMax);
+
   const yValues = [
+    ...reference.flatMap((point) => [point.p3, point.p97]),
     ...points.map((point) => point.height_cm),
     ...points.flatMap((point) => (point.khamisRoche !== null ? [point.khamisRoche] : [])),
     ...(projection?.map((point) => point.height) ?? []),
@@ -63,6 +70,9 @@ export function GrowthChart({ points, predictions, projection }: GrowthChartProp
     height?: number;
     khamisRoche?: number | null;
     projected?: number;
+    /** KiGGS-Referenz: Bereich P3 bis P97 und Median. */
+    band?: [number, number];
+    median?: number;
   };
 
   const data: Row[] = points.map((point, index) => ({
@@ -74,12 +84,24 @@ export function GrowthChart({ points, predictions, projection }: GrowthChartProp
   }));
 
   projection?.slice(1).forEach((point) => data.push({ age: point.age, projected: point.height }));
+
+  reference.forEach((point) =>
+    data.push({ age: point.age, band: [point.p3, point.p97], median: point.p50 }),
+  );
+  data.sort((a, b) => a.age - b.age);
   const hasKrHistory = points.some((point) => point.khamisRoche !== null);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground/70">
         <LegendItem color={HEIGHT_COLOR} label="Gemessene Größe" />
+        <span className="flex items-center gap-2">
+          <span
+            className="inline-block h-3 w-5 rounded-sm"
+            style={{ background: "var(--color-foreground)", opacity: 0.12 }}
+          />
+          KiGGS P3 bis P97
+        </span>
         {hasKrHistory ? (
           <LegendItem
             color={predictionColors["khamis-roche"]}
@@ -124,6 +146,31 @@ export function GrowthChart({ points, predictions, projection }: GrowthChartProp
           axisLine={false}
           width={60}
           unit=" cm"
+        />
+
+        <Area
+          type="monotone"
+          dataKey="band"
+          stroke="none"
+          fill="var(--color-foreground)"
+          fillOpacity={0.07}
+          connectNulls
+          tooltipType="none"
+          activeDot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="median"
+          stroke="var(--color-foreground)"
+          strokeOpacity={0.3}
+          strokeWidth={1}
+          strokeDasharray="2 3"
+          dot={false}
+          activeDot={false}
+          connectNulls
+          tooltipType="none"
+          isAnimationActive={false}
         />
 
         {available.map((prediction) =>
@@ -205,6 +252,7 @@ export function GrowthChart({ points, predictions, projection }: GrowthChartProp
         <Line
           type="monotone"
           dataKey="height"
+          connectNulls
           stroke={HEIGHT_COLOR}
           strokeWidth={2.5}
           dot={{ r: 4, fill: HEIGHT_COLOR }}
