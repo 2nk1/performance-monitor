@@ -38,22 +38,17 @@ function timingHeadline(
     case "observed":
       return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J. (beobachtet)`;
     case "presumed":
-      return `Bis ${formatNumber(latestAge ?? 0)} J. noch kein Gipfel (Spät-Grenze ${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.)`;
-    case "estimated":
-      return `Wachstumsschub geschätzt bei ${formatNumber(timing.phvAge ?? 0)} J.`;
+      return `Gipfel steht noch aus, mit ${formatNumber(latestAge ?? 0)} J. schon über der Spät-Grenze (${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.)`;
   }
 }
 
 function timingFootnote(
   source: NonNullable<GrowthAnalysis["timing"]>["source"],
   peak: GrowthAnalysis["peak"],
-  equation: string | undefined,
 ): string {
   switch (source) {
-    case "estimated":
-      return `Schätzung nach Moore (${equation}, ±0,5 Jahre). Sie zieht Früh- und Spätentwickler Richtung Durchschnitt, Bestätigung durch den beobachteten Gipfel folgt.`;
     case "presumed":
-      return "Vorläufig: Trotz regelmäßiger Messungen ist noch kein Wachstumsschub zu sehen. Ein flacher Schub kann im Messrauschen untergehen, Bestätigung folgt mit dem beobachteten Gipfel.";
+      return "Trotz regelmäßiger Messungen ist noch kein Wachstumsschub zu sehen, der Gipfel kommt damit nach der Grenze. Einzige Unsicherheit: ein sehr flacher Schub im Messrauschen. Bestätigung folgt mit dem beobachteten Gipfel.";
     case "manual":
       return peak.status === "confirmed"
         ? `Automatisch beobachtet: Gipfel bei ${formatNumber(peak.age ?? 0)} J.`
@@ -238,9 +233,7 @@ export function AthleteGrowthPage() {
               {analysis.timing ? (
                 <>
                   <p className="mt-2 text-2xl font-semibold">
-                    {analysis.timing.source === "presumed"
-                      ? "Möglicherweise spät"
-                      : timingLabels[analysis.timing.timing]}
+                    {timingLabels[analysis.timing.timing]}
                   </p>
                   <p className="mt-1 text-sm text-foreground/60">
                     {timingHeadline(analysis.timing, analysis.latest?.age ?? null, profile.sex)}
@@ -249,17 +242,26 @@ export function AthleteGrowthPage() {
                       : ""}
                   </p>
                   <p className="mt-3 text-xs text-foreground/50">
-                    {timingFootnote(
-                      analysis.timing.source,
-                      analysis.peak,
-                      analysis.maturity?.equation,
-                    )}
+                    {timingFootnote(analysis.timing.source, analysis.peak)}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="mt-2 text-sm text-foreground/60">Noch nicht einstufbar.</p>
-                  <p className="mt-3 text-xs text-foreground/50">{analysis.peak.note}</p>
+                  <p className="mt-2 text-2xl font-semibold">Noch nicht einstufbar</p>
+                  <p className="mt-1 text-sm text-foreground/60">
+                    {analysis.phvEstimate
+                      ? `Wachstumsschub nach Moore bei ca. ${formatNumber(analysis.phvEstimate.age)} J. geschätzt`
+                      : "Der Wachstumsschub ist noch nicht in Sicht."}
+                    {analysis.growthVelocity !== null
+                      ? ` · aktuell ${formatNumber(analysis.growthVelocity)} cm/Jahr`
+                      : ""}
+                  </p>
+                  <p className="mt-3 text-xs text-foreground/50">
+                    {analysis.phvEstimate
+                      ? `Nur als Zahl, ohne Einstufung: ${analysis.phvEstimate.equation}, ±0,5 Jahre, vor der Pubertät sehr unsicher und bei Spätentwicklern zu früh. `
+                      : ""}
+                    {analysis.peak.note}
+                  </p>
                 </>
               )}
             </div>
@@ -281,9 +283,6 @@ export function AthleteGrowthPage() {
               velocity={analysis.velocity}
               sex={profile.sex}
               peak={analysis.peak}
-              estimatedPhvAge={
-                analysis.timing?.source === "estimated" ? analysis.timing.phvAge : null
-              }
             />
             <p className="mt-3 text-xs text-foreground/50">
               {analysis.peak.status === "confirmed"

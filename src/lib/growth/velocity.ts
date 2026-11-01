@@ -159,6 +159,16 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
   }
 
   if (!before.some((point) => point.smoothed <= limit)) {
+    // Beginnt der Verlauf schon im Grundschulalter und es gibt vor dem höchsten
+    // Wert keinen Anstieg, ist es nur das Abklingen der Kindheit: Der Schub
+    // kann nicht davor gelegen haben, er hat noch nicht begonnen.
+    if (candidates[0].age <= PEAK_MIN_AGE + 1) {
+      return pending(
+        "no-spurt",
+        "Noch kein Wachstumsschub erkennbar: Die Rate sinkt seit der Kindheit oder bleibt flach.",
+      );
+    }
+
     return pending(
       "no-rise",
       "Der Anstieg wurde nicht beobachtet, der Schub lag möglicherweise vor der ersten Messung.",
