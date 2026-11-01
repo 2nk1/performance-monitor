@@ -4,7 +4,6 @@ import { buildVelocitySeries } from "@/lib/growth/velocity";
 import {
   ageInYears,
   buildGrowthAnalysis,
-  maturityStageFromPah,
   midParentTargetHeight,
   mooreMaturityOffset,
 } from "@/lib/growth/analysis";
@@ -125,13 +124,6 @@ describe("other growth models", () => {
     expect(result.offsetYears).toBeCloseTo(-7.999994 + 0.0036124 * 12 * 150, 5);
   });
 
-  it("classifies %PAH into bio-banding stages", () => {
-    expect(maturityStageFromPah(84.9)).toBe("pre-puberty");
-    expect(maturityStageFromPah(87)).toBe("early-puberty");
-    expect(maturityStageFromPah(92)).toBe("mid-puberty");
-    expect(maturityStageFromPah(96)).toBe("late-puberty");
-  });
-
   it("computes decimal age", () => {
     expect(ageInYears("2014-01-01", "2024-01-01")).toBeCloseTo(10, 2);
   });
@@ -151,7 +143,7 @@ describe("buildGrowthAnalysis", () => {
     );
     expect(analysis.predictions.find((p) => p.id === "mid-parent")?.value).toBe(179);
     expect(analysis.growthVelocity).toBeCloseTo(4 / 0.4959, 1);
-    expect(analysis.maturity?.stage).not.toBeNull();
+    expect(analysis.percentOfTarget).not.toBeNull();
   });
 
   it("reports missing inputs instead of a value", () => {
@@ -162,7 +154,7 @@ describe("buildGrowthAnalysis", () => {
     const kr = analysis.predictions.find((p) => p.id === "khamis-roche");
     expect(kr?.value).toBeNull();
     expect(kr?.missing).toEqual(["Größe beider Eltern", "Messung mit Gewicht"]);
-    expect(analysis.maturity?.stage).toBeNull();
+    expect(analysis.percentOfTarget).toBeNull();
     expect(analysis.growthVelocity).toBeNull();
   });
 });

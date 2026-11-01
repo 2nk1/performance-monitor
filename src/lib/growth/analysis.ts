@@ -77,26 +77,6 @@ export function mooreMaturityOffset(input: {
   return { offsetYears, ageAtPhv: age - offsetYears, equation };
 }
 
-/**
- * Reifestatus über den erreichten Anteil der prognostizierten Endgröße
- * (%PAH), wie im Bio-Banding üblich (Cumming et al. 2017).
- */
-export type MaturityStage = "pre-puberty" | "early-puberty" | "mid-puberty" | "late-puberty";
-
-export const maturityStageLabels: Record<MaturityStage, string> = {
-  "pre-puberty": "Vorpubertär (< 85 %)",
-  "early-puberty": "Frühe Pubertät (85–90 %)",
-  "mid-puberty": "Im Wachstumsschub (90–95 %)",
-  "late-puberty": "Späte Pubertät (> 95 %)",
-};
-
-export function maturityStageFromPah(percent: number): MaturityStage {
-  if (percent < 85) return "pre-puberty";
-  if (percent < 90) return "early-puberty";
-  if (percent < 95) return "mid-puberty";
-  return "late-puberty";
-}
-
 export type GrowthPoint = GrowthMeasurement & {
   age: number;
   /** Khamis-Roche-Prognose zum Zeitpunkt dieser Messung (falls berechenbar). */
@@ -140,7 +120,7 @@ export type GrowthAnalysis = {
   points: GrowthPoint[];
   latest: GrowthPoint | null;
   predictions: Prediction[];
-  maturity: (MaturityOffset & { stage: MaturityStage | null }) | null;
+  maturity: MaturityOffset | null;
   /** Aktuelle Größe in % der Khamis-Roche-Zielgröße. */
   percentOfTarget: number | null;
   /** Wachstumsrate zwischen den letzten beiden Messungen (cm/Jahr). */
@@ -250,15 +230,12 @@ export function buildGrowthAnalysis(
     latest && krBasis?.khamisRoche ? (latest.height_cm / krBasis.khamisRoche) * 100 : null;
 
   const maturity = latest
-    ? {
-        ...mooreMaturityOffset({
-          sex,
-          age: latest.age,
-          heightCm: latest.height_cm,
-          sittingHeightCm: latest.sitting_height_cm,
-        }),
-        stage: percentOfTarget !== null ? maturityStageFromPah(percentOfTarget) : null,
-      }
+    ? mooreMaturityOffset({
+        sex,
+        age: latest.age,
+        heightCm: latest.height_cm,
+        sittingHeightCm: latest.sitting_height_cm,
+      })
     : null;
 
   const velocity = buildVelocitySeries(points);
