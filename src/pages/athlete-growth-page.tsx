@@ -277,7 +277,8 @@ export function AthleteGrowthPage() {
             />
             <p className="mt-3 text-xs text-foreground/50">
               {analysis.peak.status === "confirmed" ? "" : `${analysis.peak.note} `}
-              Bänder: Gipfelalter früh, normal, spät (Kozieł & Malina 2018). Rate geglättet.
+              Bänder: Gipfelalter früh, normal, spät (Kozieł & Malina 2018). Gepunktet: Median der
+              KiGGS-Referenz, glättet den Schub.
             </p>
           </section>
 
