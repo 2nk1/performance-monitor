@@ -1,6 +1,12 @@
 import { supabase } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
-import type { ComparisonTest, Participant, PerformanceTest } from "@/lib/types";
+import type {
+  ComparisonTest,
+  GrowthMeasurement,
+  GrowthProfile,
+  Participant,
+  PerformanceTest,
+} from "@/lib/types";
 
 export const queryKeys = {
   authSession: ["auth", "session"] as const,
@@ -10,6 +16,11 @@ export const queryKeys = {
   performanceTestsByParticipant: (id: string) => ["performance-tests", "participant", id] as const,
   performanceTest: (id: string, testId: string) => ["performance-tests", id, testId] as const,
   comparison: ["comparison"] as const,
+  growthProfile: (id: string) => ["growth-profile", id] as const,
+  growthMeasurementsByParticipant: (id: string) =>
+    ["growth-measurements", "participant", id] as const,
+  growthMeasurement: (id: string, measurementId: string) =>
+    ["growth-measurements", id, measurementId] as const,
 };
 
 export async function fetchDashboardStats() {
@@ -188,4 +199,57 @@ export async function fetchComparisonTests(): Promise<ComparisonTest[]> {
       } satisfies ComparisonTest;
     })
     .filter((value): value is ComparisonTest => value !== null);
+}
+
+const GROWTH_MEASUREMENT_COLUMNS =
+  "id, participant_id, measured_at, height_cm, weight_kg, sitting_height_cm, notes, created_at";
+
+export async function fetchGrowthProfile(id: string): Promise<GrowthProfile | null> {
+  const { data, error } = await supabase
+    .from("growth_profiles")
+    .select(
+      "participant_id, sex, birth_date, mother_height_cm, father_height_cm, created_at, updated_at",
+    )
+    .eq("participant_id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Wachstumsprofil konnte nicht geladen werden: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function fetchGrowthMeasurementsByParticipant(
+  id: string,
+): Promise<GrowthMeasurement[]> {
+  const { data, error } = await supabase
+    .from("growth_measurements")
+    .select(GROWTH_MEASUREMENT_COLUMNS)
+    .eq("participant_id", id)
+    .order("measured_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Wachstumsmessungen konnten nicht geladen werden: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function fetchGrowthMeasurement(
+  id: string,
+  measurementId: string,
+): Promise<GrowthMeasurement | null> {
+  const { data, error } = await supabase
+    .from("growth_measurements")
+    .select(GROWTH_MEASUREMENT_COLUMNS)
+    .eq("id", measurementId)
+    .eq("participant_id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Wachstumsmessung konnte nicht geladen werden: ${error.message}`);
+  }
+
+  return data;
 }

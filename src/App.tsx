@@ -12,6 +12,10 @@ import { NewPerformanceTestPage } from "@/pages/new-performance-test-page";
 import { EditPerformanceTestPage } from "@/pages/edit-performance-test-page";
 import { DeletePerformanceTestPage } from "@/pages/delete-performance-test-page";
 import { ComparePage } from "@/pages/compare-page";
+import { AthleteGrowthPage } from "@/pages/athlete-growth-page";
+import { EditGrowthProfilePage } from "@/pages/edit-growth-profile-page";
+import { GrowthMeasurementFormPage } from "@/pages/growth-measurement-form-page";
+import { DeleteGrowthMeasurementPage } from "@/pages/delete-growth-measurement-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { supabase } from "@/lib/supabase/client";
 import { queryKeys } from "@/lib/data";
@@ -44,6 +48,20 @@ const router = createBrowserRouter(
             {
               path: "/athletes/:id/tests/:testId/delete",
               element: <DeletePerformanceTestPage />,
+            },
+            { path: "/athletes/:id/growth", element: <AthleteGrowthPage /> },
+            { path: "/athletes/:id/growth/profile", element: <EditGrowthProfilePage /> },
+            {
+              path: "/athletes/:id/growth/measurements/new",
+              element: <GrowthMeasurementFormPage key="new" />,
+            },
+            {
+              path: "/athletes/:id/growth/measurements/:measurementId/edit",
+              element: <GrowthMeasurementFormPage key="edit" />,
+            },
+            {
+              path: "/athletes/:id/growth/measurements/:measurementId/delete",
+              element: <DeleteGrowthMeasurementPage />,
             },
             { path: "/compare", element: <ComparePage mode="comparison" /> },
             { path: "/compare/ranking", element: <ComparePage mode="ranking" /> },

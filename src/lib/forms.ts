@@ -57,3 +57,55 @@ export function parsePerformanceTestForm(formData: FormData): PerformanceTestFor
     ballControl: parseNullableNumber(formData.get("ball_control_count")),
   };
 }
+
+export type GrowthProfileFormValues = {
+  sex: "male" | "female";
+  birthDate: string;
+  motherHeight: number | null;
+  fatherHeight: number | null;
+};
+
+export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormValues {
+  const sex = formData.get("sex");
+
+  if (sex !== "male" && sex !== "female") {
+    throw new Error("Geschlecht fehlt.");
+  }
+
+  return {
+    sex,
+    birthDate: requireString(formData.get("birth_date"), "Geburtsdatum"),
+    motherHeight: parseNullableNumber(formData.get("mother_height_cm")),
+    fatherHeight: parseNullableNumber(formData.get("father_height_cm")),
+  };
+}
+
+export type GrowthMeasurementFormValues = {
+  measuredAt: string;
+  height: number;
+  weight: number | null;
+  sittingHeight: number | null;
+  notes: string | null;
+};
+
+export function parseGrowthMeasurementForm(formData: FormData): GrowthMeasurementFormValues {
+  const height = parseNullableNumber(formData.get("height_cm"));
+
+  if (height === null) {
+    throw new Error("Körpergröße fehlt.");
+  }
+
+  const sittingHeight = parseNullableNumber(formData.get("sitting_height_cm"));
+
+  if (sittingHeight !== null && sittingHeight >= height) {
+    throw new Error("Die Sitzhöhe muss kleiner als die Körpergröße sein.");
+  }
+
+  return {
+    measuredAt: requireString(formData.get("measured_at"), "Messdatum"),
+    height,
+    weight: parseNullableNumber(formData.get("weight_kg")),
+    sittingHeight,
+    notes: parseOptionalString(formData.get("notes")),
+  };
+}

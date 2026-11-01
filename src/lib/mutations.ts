@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase/client";
-import type { PerformanceTestFormValues } from "@/lib/forms";
+import type {
+  GrowthMeasurementFormValues,
+  GrowthProfileFormValues,
+  PerformanceTestFormValues,
+} from "@/lib/forms";
 
 export async function createParticipant(input: {
   name: string;
@@ -99,5 +103,72 @@ export async function deletePerformanceTest(participantId: string, testId: strin
 
   if (error) {
     throw new Error(`Leistungstest konnte nicht gelöscht werden: ${error.message}`);
+  }
+}
+
+export async function saveGrowthProfile(participantId: string, input: GrowthProfileFormValues) {
+  const { error } = await supabase.from("growth_profiles").upsert({
+    participant_id: participantId,
+    sex: input.sex,
+    birth_date: input.birthDate,
+    mother_height_cm: input.motherHeight,
+    father_height_cm: input.fatherHeight,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw new Error(`Wachstumsprofil konnte nicht gespeichert werden: ${error.message}`);
+  }
+}
+
+export async function createGrowthMeasurement(
+  participantId: string,
+  input: GrowthMeasurementFormValues,
+) {
+  const { error } = await supabase.from("growth_measurements").insert({
+    participant_id: participantId,
+    measured_at: input.measuredAt,
+    height_cm: input.height,
+    weight_kg: input.weight,
+    sitting_height_cm: input.sittingHeight,
+    notes: input.notes,
+  });
+
+  if (error) {
+    throw new Error(`Wachstumsmessung konnte nicht gespeichert werden: ${error.message}`);
+  }
+}
+
+export async function updateGrowthMeasurement(
+  participantId: string,
+  measurementId: string,
+  input: GrowthMeasurementFormValues,
+) {
+  const { error } = await supabase
+    .from("growth_measurements")
+    .update({
+      measured_at: input.measuredAt,
+      height_cm: input.height,
+      weight_kg: input.weight,
+      sitting_height_cm: input.sittingHeight,
+      notes: input.notes,
+    })
+    .eq("id", measurementId)
+    .eq("participant_id", participantId);
+
+  if (error) {
+    throw new Error(`Wachstumsmessung konnte nicht geändert werden: ${error.message}`);
+  }
+}
+
+export async function deleteGrowthMeasurement(participantId: string, measurementId: string) {
+  const { error } = await supabase
+    .from("growth_measurements")
+    .delete()
+    .eq("id", measurementId)
+    .eq("participant_id", participantId);
+
+  if (error) {
+    throw new Error(`Wachstumsmessung konnte nicht gelöscht werden: ${error.message}`);
   }
 }
