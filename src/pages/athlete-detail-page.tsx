@@ -119,6 +119,13 @@ export function AthleteDetailPage() {
 
           <div className="flex gap-3">
             <Link
+              to={`/athletes/${participant.id}/growth`}
+              className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium hover:bg-sage/20"
+            >
+              Wachstum
+            </Link>
+
+            <Link
               to={`/athletes/${participant.id}/edit`}
               className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium hover:bg-sage/20"
             >

@@ -16,6 +16,7 @@ export type Database = {
   public: {
     Enums: {
       participant_type: "athlete" | "reference";
+      growth_sex: "male" | "female";
     };
     Tables: {
       participants: {
@@ -79,6 +80,69 @@ export type Database = {
           jump_reach_cm?: number | null;
           sprint_93639_seconds?: number | null;
           ball_control_count?: number | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      growth_profiles: {
+        Row: {
+          participant_id: string;
+          sex: Database["public"]["Enums"]["growth_sex"];
+          birth_date: string;
+          mother_height_cm: number | null;
+          father_height_cm: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          participant_id: string;
+          sex: Database["public"]["Enums"]["growth_sex"];
+          birth_date: string;
+          mother_height_cm?: number | null;
+          father_height_cm?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          participant_id?: string;
+          sex?: Database["public"]["Enums"]["growth_sex"];
+          birth_date?: string;
+          mother_height_cm?: number | null;
+          father_height_cm?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      growth_measurements: {
+        Row: {
+          id: string;
+          participant_id: string;
+          measured_at: string;
+          height_cm: number;
+          weight_kg: number | null;
+          sitting_height_cm: number | null;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          participant_id: string;
+          measured_at: string;
+          height_cm: number;
+          weight_kg?: number | null;
+          sitting_height_cm?: number | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          participant_id?: string;
+          measured_at?: string;
+          height_cm?: number;
+          weight_kg?: number | null;
+          sitting_height_cm?: number | null;
           notes?: string | null;
           created_at?: string;
         };
