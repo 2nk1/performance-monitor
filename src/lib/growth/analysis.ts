@@ -86,7 +86,7 @@ export type GrowthPoint = GrowthMeasurement & {
   percentPredicted: number | null;
 };
 
-export type PredictionModelId = "khamis-roche" | "mid-parent";
+export type PredictionModelId = "khamis-roche" | "khamis-roche-adjusted" | "mid-parent";
 
 export type Prediction = {
   id: PredictionModelId;
@@ -229,8 +229,49 @@ export function buildGrowthAnalysis(
     },
   ];
 
-  const percentOfTarget =
-    latest && krBasis?.khamisRoche ? (latest.height_cm / krBasis.khamisRoche) * 100 : null;
+  // Khamis-Roche mit Entwicklungsalter: Alter minus manuell gesetzte Verzögerung. Das ist
+  // keine validierte Anwendung der Methode (sie rechnet mit dem Kalenderalter von
+  // durchschnittlich entwickelten Kindern), sondern eine Näherung für früh/spät Entwickelnde.
+  const delay = profile.maturity_delay_years;
+
+  if (delay !== null && delay !== 0) {
+    const adjustedAge = krBasis ? krBasis.age - delay : null;
+    const adjusted =
+      krBasis && hasParents && krBasis.weight_kg !== null && adjustedAge !== null
+        ? predictKhamisRoche({
+            sex,
+            age: adjustedAge,
+            heightCm: krBasis.height_cm,
+            weightKg: krBasis.weight_kg,
+            motherHeightCm: mother_height_cm,
+            fatherHeightCm: father_height_cm,
+          })
+        : null;
+    const formatAge = (age: number) => age.toFixed(1).replace(".", ",");
+
+    predictions.splice(1, 0, {
+      id: "khamis-roche-adjusted",
+      label: "Khamis-Roche (Entwicklungsalter)",
+      description:
+        krBasis && adjustedAge !== null
+          ? `Alter ${formatAge(adjustedAge)} statt ${formatAge(krBasis.age)} J., nicht validiert`
+          : null,
+      value: adjusted,
+      range: null,
+      basisDate: krBasis?.measured_at ?? null,
+      missing:
+        adjusted !== null
+          ? []
+          : krBasis
+            ? ["Entwicklungsalter zwischen 4 und 17,5 Jahren"]
+            : krMissing,
+    });
+  }
+
+  // Mit gesetzter Entwicklungsverzögerung zählt die Zielgröße mit Entwicklungsalter.
+  const adjustedTarget = predictions.find((p) => p.id === "khamis-roche-adjusted")?.value ?? null;
+  const percentTarget = adjustedTarget ?? krBasis?.khamisRoche ?? null;
+  const percentOfTarget = latest && percentTarget ? (latest.height_cm / percentTarget) * 100 : null;
 
   const maturity = latest
     ? mooreMaturityOffset({

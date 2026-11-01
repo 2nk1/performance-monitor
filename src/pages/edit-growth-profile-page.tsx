@@ -141,6 +141,21 @@ export function EditGrowthProfilePage() {
         </div>
 
         <div>
+          <NumberField
+            id="maturity_delay_years"
+            label="Entwicklungsverzögerung (optional)"
+            unit="Jahre"
+            min="-4"
+            step="0.5"
+            defaultValue={profile?.maturity_delay_years}
+          />
+          <p className="mt-1 text-xs text-foreground/50">
+            Wie viele Jahre der Spieler hinter den Gleichaltrigen liegt (negativ: früher). Die
+            Khamis-Roche-Zielgröße wird zusätzlich mit diesem Entwicklungsalter berechnet.
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="maturity_override" className="mb-1 block text-sm font-medium">
             Entwicklungstyp (optional)
           </label>

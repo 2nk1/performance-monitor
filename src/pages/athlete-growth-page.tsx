@@ -180,7 +180,11 @@ export function AthleteGrowthPage() {
         </div>
       ) : (
         <>
-          <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <section
+            className={`mb-8 grid gap-4 md:grid-cols-2 ${
+              analysis.predictions.length > 2 ? "xl:grid-cols-5" : "xl:grid-cols-4"
+            }`}
+          >
             {analysis.predictions.map((prediction) => (
               <div
                 key={prediction.id}
@@ -220,7 +224,13 @@ export function AthleteGrowthPage() {
 
             <div
               className="rounded-xl border border-card-border bg-card p-5"
-              title="Aktuelle Größe in % der Khamis-Roche-Zielgröße"
+              title={
+                analysis.predictions.some(
+                  (p) => p.id === "khamis-roche-adjusted" && p.value !== null,
+                )
+                  ? "Aktuelle Größe in % der Khamis-Roche-Zielgröße mit Entwicklungsalter"
+                  : "Aktuelle Größe in % der Khamis-Roche-Zielgröße"
+              }
             >
               <p className="text-sm text-foreground/60">Erreichte Zielgröße</p>
               {analysis.percentOfTarget !== null ? (
@@ -237,7 +247,7 @@ export function AthleteGrowthPage() {
               title={timingTooltip(analysis.timing, profile.sex)}
             >
               <p className="text-sm text-foreground/60">Entwicklungstyp</p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-xl font-semibold break-words">
                 {analysis.timing ? timingLabels[analysis.timing.timing] : "Noch nicht einstufbar"}
               </p>
               <p className="mt-1 text-sm text-foreground/60">
