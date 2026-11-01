@@ -112,6 +112,8 @@ export function AthleteGrowthPage() {
   }
 
   const profile = profileQuery.data;
+  const adjustedPrediction =
+    analysis?.predictions.find((prediction) => prediction.id === "khamis-roche-adjusted") ?? null;
   const currentPercentile =
     profile && analysis?.latest
       ? heightPercentile(profile.sex, analysis.latest.age, analysis.latest.height_cm)
@@ -180,47 +182,66 @@ export function AthleteGrowthPage() {
         </div>
       ) : (
         <>
-          <section
-            className={`mb-8 grid gap-4 md:grid-cols-2 ${
-              analysis.predictions.length > 2 ? "xl:grid-cols-5" : "xl:grid-cols-4"
-            }`}
-          >
-            {analysis.predictions.map((prediction) => (
-              <div
-                key={prediction.id}
-                className="rounded-xl border border-card-border bg-card p-5"
-                style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
-              >
-                <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
-                {prediction.value !== null ? (
-                  <>
-                    <p className="mt-2 text-3xl font-semibold">
-                      {formatNumber(prediction.value)} <span className="text-lg">cm</span>
-                    </p>
-                    {prediction.range ? (
-                      <p className="mt-1 text-sm text-foreground/60">
-                        {formatNumber(prediction.value - prediction.range)} –{" "}
-                        {formatNumber(prediction.value + prediction.range)} cm
+          <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {analysis.predictions
+              .filter((prediction) => prediction.id !== "khamis-roche-adjusted")
+              .map((prediction) => (
+                <div
+                  key={prediction.id}
+                  className="rounded-xl border border-card-border bg-card p-5"
+                  style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
+                >
+                  <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
+                  {prediction.value !== null ? (
+                    <>
+                      <p className="mt-2 text-3xl font-semibold">
+                        {formatNumber(prediction.value)} <span className="text-lg">cm</span>
                       </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="mt-2 text-sm text-foreground/60">
-                    Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
-                  </p>
-                )}
-                {(() => {
-                  const footer =
-                    prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
-                      ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
-                      : prediction.description;
+                      {prediction.range ? (
+                        <p className="mt-1 text-sm text-foreground/60">
+                          {formatNumber(prediction.value - prediction.range)} –{" "}
+                          {formatNumber(prediction.value + prediction.range)} cm
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="mt-2 text-sm text-foreground/60">
+                      Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
+                    </p>
+                  )}
+                  {prediction.id === "khamis-roche" && adjustedPrediction ? (
+                    <div
+                      className="mt-3 border-t border-card-border pt-3"
+                      title={adjustedPrediction.description ?? undefined}
+                    >
+                      <p className="text-xs text-foreground/60">mit Entwicklungsalter</p>
+                      {adjustedPrediction.value !== null ? (
+                        <p
+                          className="mt-1 text-xl font-semibold"
+                          style={{ color: predictionColors["khamis-roche-adjusted"] }}
+                        >
+                          {formatNumber(adjustedPrediction.value)}{" "}
+                          <span className="text-sm">cm</span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-sm text-foreground/60">
+                          Nicht berechenbar. Es fehlt: {adjustedPrediction.missing.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  {(() => {
+                    const footer =
+                      prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
+                        ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                        : prediction.description;
 
-                  return footer ? (
-                    <p className="mt-3 text-xs text-foreground/50">{footer}</p>
-                  ) : null;
-                })()}
-              </div>
-            ))}
+                    return footer ? (
+                      <p className="mt-3 text-xs text-foreground/50">{footer}</p>
+                    ) : null;
+                  })()}
+                </div>
+              ))}
 
             <div
               className="rounded-xl border border-card-border bg-card p-5"
