@@ -22,6 +22,7 @@ function measurement(overrides: Partial<GrowthMeasurement>): GrowthMeasurement {
     height_cm: 150,
     weight_kg: 40,
     sitting_height_cm: null,
+    arm_span_cm: null,
     notes: null,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,

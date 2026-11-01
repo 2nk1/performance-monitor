@@ -4,7 +4,7 @@ import type { GrowthMeasurement } from "@/lib/types";
 type GrowthMeasurementFieldsProps = {
   defaultValues?: Pick<
     GrowthMeasurement,
-    "measured_at" | "height_cm" | "weight_kg" | "sitting_height_cm" | "notes"
+    "measured_at" | "height_cm" | "weight_kg" | "sitting_height_cm" | "arm_span_cm" | "notes"
   >;
 };
 
@@ -53,6 +53,17 @@ export function GrowthMeasurementFields({ defaultValues }: GrowthMeasurementFiel
           min="1"
           step="0.1"
           defaultValue={defaultValues?.sitting_height_cm}
+        />
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <NumberField
+          id="arm_span_cm"
+          label="Armspannweite (optional)"
+          unit="cm"
+          min="30"
+          step="0.1"
+          defaultValue={defaultValues?.arm_span_cm}
         />
       </div>
 

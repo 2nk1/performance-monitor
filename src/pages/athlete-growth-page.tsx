@@ -12,6 +12,7 @@ import {
 import { formatTestDate } from "@/lib/format";
 import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
 import { predictionColors } from "@/lib/growth/colors";
+import { armSpanRatio } from "@/lib/growth/proportions";
 import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
 import type { GrowthSex } from "@/lib/types";
 import { NotFoundPage } from "@/pages/not-found-page";
@@ -275,12 +276,14 @@ export function AthleteGrowthPage() {
             <h2 className="mb-4 text-lg font-semibold">Messungen</h2>
 
             <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
-              <div className="grid min-w-[760px] grid-cols-[100px_70px_repeat(5,1fr)_70px] gap-4 border-b border-card-border px-5 py-3 text-sm font-medium text-foreground/60">
+              <div className="grid min-w-[960px] grid-cols-[100px_70px_repeat(7,1fr)_70px] gap-4 border-b border-card-border px-5 py-3 text-sm font-medium text-foreground/60">
                 <span>Datum</span>
                 <span>Alter</span>
                 <span>Größe</span>
                 <span>Gewicht</span>
                 <span>Sitzhöhe</span>
+                <span>Armspanne</span>
+                <span>Spanne/Größe</span>
                 <span>Prognose KR</span>
                 <span>% Endgröße</span>
                 <span></span>
@@ -294,7 +297,7 @@ export function AthleteGrowthPage() {
                 measurementsDesc.map((point) => (
                   <div
                     key={point.id}
-                    className="grid min-w-[760px] grid-cols-[100px_70px_repeat(5,1fr)_70px] gap-4 border-b border-card-border/50 px-5 py-4 text-sm last:border-b-0"
+                    className="grid min-w-[960px] grid-cols-[100px_70px_repeat(7,1fr)_70px] gap-4 border-b border-card-border/50 px-5 py-4 text-sm last:border-b-0"
                   >
                     <span>{formatTestDate(point.measured_at)}</span>
                     <span>{formatNumber(point.age)}</span>
@@ -305,6 +308,14 @@ export function AthleteGrowthPage() {
                     <span>
                       {point.sitting_height_cm !== null
                         ? `${formatNumber(point.sitting_height_cm)} cm`
+                        : "-"}
+                    </span>
+                    <span>
+                      {point.arm_span_cm !== null ? `${formatNumber(point.arm_span_cm)} cm` : "-"}
+                    </span>
+                    <span>
+                      {armSpanRatio(point.arm_span_cm, point.height_cm) !== null
+                        ? formatNumber(armSpanRatio(point.arm_span_cm, point.height_cm) ?? 0, 2)
                         : "-"}
                     </span>
                     <span>

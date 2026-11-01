@@ -202,7 +202,7 @@ export async function fetchComparisonTests(): Promise<ComparisonTest[]> {
 }
 
 const GROWTH_MEASUREMENT_COLUMNS =
-  "id, participant_id, measured_at, height_cm, weight_kg, sitting_height_cm, notes, created_at";
+  "id, participant_id, measured_at, height_cm, weight_kg, sitting_height_cm, arm_span_cm, notes, created_at";
 
 export async function fetchGrowthProfile(id: string): Promise<GrowthProfile | null> {
   const { data, error } = await supabase

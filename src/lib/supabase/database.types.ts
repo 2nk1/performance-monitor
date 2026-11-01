@@ -127,6 +127,7 @@ export type Database = {
           height_cm: number;
           weight_kg: number | null;
           sitting_height_cm: number | null;
+          arm_span_cm: number | null;
           notes: string | null;
           created_at: string;
         };
@@ -137,6 +138,7 @@ export type Database = {
           height_cm: number;
           weight_kg?: number | null;
           sitting_height_cm?: number | null;
+          arm_span_cm?: number | null;
           notes?: string | null;
           created_at?: string;
         };
@@ -147,6 +149,7 @@ export type Database = {
           height_cm?: number;
           weight_kg?: number | null;
           sitting_height_cm?: number | null;
+          arm_span_cm?: number | null;
           notes?: string | null;
           created_at?: string;
         };
