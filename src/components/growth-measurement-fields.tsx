@@ -31,7 +31,7 @@ export function GrowthMeasurementFields({ defaultValues }: GrowthMeasurementFiel
           id="height_cm"
           label="Körpergröße"
           unit="cm"
-          min="50"
+          min="30"
           step="0.1"
           defaultValue={defaultValues?.height_cm}
         />
@@ -42,7 +42,7 @@ export function GrowthMeasurementFields({ defaultValues }: GrowthMeasurementFiel
           id="weight_kg"
           label="Gewicht (für Khamis-Roche)"
           unit="kg"
-          min="5"
+          min="0.5"
           step="0.1"
           defaultValue={defaultValues?.weight_kg}
         />
