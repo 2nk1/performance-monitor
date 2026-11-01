@@ -119,7 +119,7 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
       highestAge: null,
       age: null,
       velocity: null,
-      note: "Zu wenige Messungen: Für die Gipfelerkennung braucht es mindestens 5 Messungen zwischen 8 und 18 Jahren im Abstand von höchstens 1,5 Jahren.",
+      note: "Zu wenige Messungen für die Gipfelerkennung (mind. 5 zwischen 8 und 18 Jahren).",
     };
   }
 
@@ -145,17 +145,11 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
   });
 
   if (peak.smoothed < MIN_PEAK_VELOCITY) {
-    return pending(
-      "no-spurt",
-      "Noch kein Wachstumsschub erkennbar: Die Geschwindigkeit liegt unter 6,5 cm/Jahr.",
-    );
+    return pending("no-spurt", "Noch kein Schub: Rate unter 6,5 cm/Jahr.");
   }
 
   if (after.length < 2) {
-    return pending(
-      "rising",
-      "Der höchste Wert liegt bei den letzten Messungen. Eine Bestätigung braucht zwei weitere Messungen.",
-    );
+    return pending("rising", "Höchster Wert bei den letzten Messungen, noch nicht bestätigt.");
   }
 
   if (!before.some((point) => point.smoothed <= limit)) {
@@ -163,26 +157,17 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
     // Wert keinen Anstieg, ist es nur das Abklingen der Kindheit: Der Schub
     // kann nicht davor gelegen haben, er hat noch nicht begonnen.
     if (candidates[0].age <= PEAK_MIN_AGE + 1) {
-      return pending(
-        "no-spurt",
-        "Noch kein Wachstumsschub erkennbar: Die Rate sinkt seit der Kindheit oder bleibt flach.",
-      );
+      return pending("no-spurt", "Noch kein Schub erkennbar.");
     }
 
-    return pending(
-      "no-rise",
-      "Der Anstieg wurde nicht beobachtet, der Schub lag möglicherweise vor der ersten Messung.",
-    );
+    return pending("no-rise", "Anstieg nicht beobachtet, Schub evtl. vor der ersten Messung.");
   }
 
   const laterAfter = after.slice(1);
   const laterMean = laterAfter.reduce((sum, point) => sum + point.smoothed, 0) / laterAfter.length;
 
   if (laterMean > limit) {
-    return pending(
-      "no-drop",
-      "Die Geschwindigkeit sinkt nach dem höchsten Wert noch nicht deutlich.",
-    );
+    return pending("no-drop", "Rate sinkt noch nicht deutlich.");
   }
 
   return {
@@ -191,6 +176,6 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
     highestAge: peak.age,
     age: peak.age,
     velocity: peak.smoothed,
-    note: "Gipfel der Wachstumsgeschwindigkeit beobachtet.",
+    note: "Gipfel beobachtet.",
   };
 }

@@ -27,34 +27,41 @@ const formatNumber = (value: number, decimals = 1) =>
     maximumFractionDigits: decimals,
   });
 
-function timingHeadline(
-  timing: NonNullable<GrowthAnalysis["timing"]>,
-  latestAge: number | null,
-  sex: GrowthSex,
+/** Eine kurze Zeile unter dem Entwicklungstyp. */
+function timingSummary(
+  timing: GrowthAnalysis["timing"],
+  analysis: GrowthAnalysis,
+  velocity: string,
 ): string {
+  if (!timing) {
+    return analysis.phvEstimate
+      ? `Schub laut Moore ca. ${formatNumber(analysis.phvEstimate.age)} J.${velocity}`
+      : `Noch kein Schub in Sicht${velocity}`;
+  }
+
   switch (timing.source) {
     case "manual":
-      return "Manuell festgelegt";
+      return `Manuell festgelegt${velocity}`;
     case "observed":
-      return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J. (beobachtet)`;
+      return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J.${velocity}`;
     case "presumed":
-      return `Gipfel steht noch aus, mit ${formatNumber(latestAge ?? 0)} J. schon über der Spät-Grenze (${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.)`;
+      return `Kein Gipfel bis ${formatNumber(analysis.latest?.age ?? 0)} J.${velocity}`;
   }
 }
 
-function timingFootnote(
-  source: NonNullable<GrowthAnalysis["timing"]>["source"],
-  peak: GrowthAnalysis["peak"],
-): string {
-  switch (source) {
-    case "presumed":
-      return "Trotz regelmäßiger Messungen ist noch kein Wachstumsschub zu sehen, der Gipfel kommt damit nach der Grenze. Einzige Unsicherheit: ein sehr flacher Schub im Messrauschen. Bestätigung folgt mit dem beobachteten Gipfel.";
+/** Ausführlichere Erklärung, nur als Tooltip. */
+function timingTooltip(timing: GrowthAnalysis["timing"], sex: GrowthSex): string {
+  if (!timing) {
+    return "Keine Einstufung ohne beobachteten Gipfel. Die Moore-Schätzung ist vor der Pubertät unsicher (±0,5 Jahre) und bei Spätentwicklern zu früh.";
+  }
+
+  switch (timing.source) {
     case "manual":
-      return peak.status === "confirmed"
-        ? `Automatisch beobachtet: Gipfel bei ${formatNumber(peak.age ?? 0)} J.`
-        : peak.note;
+      return "Im Profil festgelegt, überschreibt die Automatik.";
     case "observed":
-      return `Spitze ${formatNumber(peak.velocity ?? 0)} cm/Jahr`;
+      return "Aus dem beobachteten Gipfel der Wachstumsrate.";
+    case "presumed":
+      return `Älter als die Spät-Grenze (${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.) und noch kein Schub sichtbar. Ein sehr flacher Schub könnte im Messrauschen untergehen.`;
   }
 }
 
@@ -197,7 +204,7 @@ export function AthleteGrowthPage() {
                 {(() => {
                   const footer =
                     prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
-                      ? `Stand: Messung vom ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                      ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
                       : prediction.description;
 
                   return footer ? (
@@ -207,7 +214,10 @@ export function AthleteGrowthPage() {
               </div>
             ))}
 
-            <div className="rounded-xl border border-card-border bg-card p-5">
+            <div
+              className="rounded-xl border border-card-border bg-card p-5"
+              title="Aktuelle Größe in % der Khamis-Roche-Zielgröße"
+            >
               <p className="text-sm text-foreground/60">Reifestatus</p>
               {analysis.percentOfTarget !== null ? (
                 <>
@@ -217,53 +227,29 @@ export function AthleteGrowthPage() {
                   <p className="mt-1 text-sm text-foreground/60">
                     {analysis.maturity?.stage ? maturityStageLabels[analysis.maturity.stage] : ""}
                   </p>
-                  <p className="mt-3 text-xs text-foreground/50">
-                    Aktuelle Größe im Verhältnis zur Khamis-Roche-Zielgröße
-                  </p>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-foreground/60">
-                  Nicht berechenbar, braucht die Khamis-Roche-Zielgröße.
-                </p>
+                <p className="mt-2 text-sm text-foreground/60">Braucht Khamis-Roche</p>
               )}
             </div>
 
-            <div className="rounded-xl border border-card-border bg-card p-5">
+            <div
+              className="rounded-xl border border-card-border bg-card p-5"
+              title={timingTooltip(analysis.timing, profile.sex)}
+            >
               <p className="text-sm text-foreground/60">Entwicklungstyp</p>
-              {analysis.timing ? (
-                <>
-                  <p className="mt-2 text-2xl font-semibold">
-                    {timingLabels[analysis.timing.timing]}
-                  </p>
-                  <p className="mt-1 text-sm text-foreground/60">
-                    {timingHeadline(analysis.timing, analysis.latest?.age ?? null, profile.sex)}
-                    {analysis.growthVelocity !== null
-                      ? ` · aktuell ${formatNumber(analysis.growthVelocity)} cm/Jahr`
-                      : ""}
-                  </p>
-                  <p className="mt-3 text-xs text-foreground/50">
-                    {timingFootnote(analysis.timing.source, analysis.peak)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 text-2xl font-semibold">Noch nicht einstufbar</p>
-                  <p className="mt-1 text-sm text-foreground/60">
-                    {analysis.phvEstimate
-                      ? `Wachstumsschub nach Moore bei ca. ${formatNumber(analysis.phvEstimate.age)} J. geschätzt`
-                      : "Der Wachstumsschub ist noch nicht in Sicht."}
-                    {analysis.growthVelocity !== null
-                      ? ` · aktuell ${formatNumber(analysis.growthVelocity)} cm/Jahr`
-                      : ""}
-                  </p>
-                  <p className="mt-3 text-xs text-foreground/50">
-                    {analysis.phvEstimate
-                      ? `Nur als Zahl, ohne Einstufung: ${analysis.phvEstimate.equation}, ±0,5 Jahre, vor der Pubertät sehr unsicher und bei Spätentwicklern zu früh. `
-                      : ""}
-                    {analysis.peak.note}
-                  </p>
-                </>
-              )}
+              <p className="mt-2 text-2xl font-semibold">
+                {analysis.timing ? timingLabels[analysis.timing.timing] : "Noch nicht einstufbar"}
+              </p>
+              <p className="mt-1 text-sm text-foreground/60">
+                {timingSummary(
+                  analysis.timing,
+                  analysis,
+                  analysis.growthVelocity !== null
+                    ? ` · ${formatNumber(analysis.growthVelocity)} cm/Jahr`
+                    : "",
+                )}
+              </p>
             </div>
           </section>
 
@@ -271,9 +257,8 @@ export function AthleteGrowthPage() {
             <h2 className="mb-4 text-lg font-semibold">Wachstumskurve</h2>
             <GrowthChart points={analysis.points} predictions={analysis.predictions} />
             <p className="mt-3 text-xs text-foreground/50">
-              Schattierte Bereiche: Unsicherheit der Prognose (Khamis-Roche: 90-%-Fehlergrenze,
-              Elterngröße: ±8,5 cm). Khamis-Roche gilt von 4 bis 17,5 Jahren und ist rund um den
-              Wachstumsschub am ungenauesten, besonders bei sehr frühen oder späten Entwicklern.
+              Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm).
+              Khamis-Roche gilt für 4 bis 17,5 Jahre.
             </p>
           </section>
 
@@ -285,12 +270,8 @@ export function AthleteGrowthPage() {
               peak={analysis.peak}
             />
             <p className="mt-3 text-xs text-foreground/50">
-              {analysis.peak.status === "confirmed"
-                ? `Der Gipfel der Wachstumsgeschwindigkeit wurde beobachtet. `
-                : `${analysis.peak.note} `}
-              Die Bänder zeigen, in welchem Alter der Gipfel bei früh, normal und spät entwickelnden{" "}
-              {profile.sex === "male" ? "Jungen" : "Mädchen"} liegt (Kozieł & Malina 2018). Einzelne
-              Intervalle schwanken durch Messfehler, die Linie ist deshalb geglättet.
+              {analysis.peak.status === "confirmed" ? "" : `${analysis.peak.note} `}
+              Bänder: Gipfelalter früh, normal, spät (Kozieł & Malina 2018). Rate geglättet.
             </p>
           </section>
 
