@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { GrowthChart } from "@/components/growth-chart";
@@ -186,82 +186,92 @@ export function AthleteGrowthPage() {
             {analysis.predictions
               .filter((prediction) => prediction.id !== "khamis-roche-adjusted")
               .map((prediction) => (
-                <div
-                  key={prediction.id}
-                  className="rounded-xl border border-card-border bg-card p-5"
-                  style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
-                >
-                  <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
-                  {prediction.value !== null ? (
-                    <>
-                      <p className="mt-2 text-3xl font-semibold">
-                        {formatNumber(prediction.value)} <span className="text-lg">cm</span>
-                      </p>
-                      {prediction.range ? (
-                        <p className="mt-1 text-sm text-foreground/60">
-                          {formatNumber(prediction.value - prediction.range)} –{" "}
-                          {formatNumber(prediction.value + prediction.range)} cm
+                <Fragment key={prediction.id}>
+                  <div
+                    className="rounded-xl border border-card-border bg-card p-5"
+                    style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
+                  >
+                    <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
+                    {prediction.value !== null ? (
+                      <>
+                        <p className="mt-2 text-3xl font-semibold">
+                          {formatNumber(prediction.value)} <span className="text-lg">cm</span>
                         </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="mt-2 text-sm text-foreground/60">
-                      Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
-                    </p>
-                  )}
-                  {prediction.id === "khamis-roche" && adjustedPrediction ? (
+                        {prediction.range ? (
+                          <p className="mt-1 text-sm text-foreground/60">
+                            {formatNumber(prediction.value - prediction.range)} –{" "}
+                            {formatNumber(prediction.value + prediction.range)} cm
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-sm text-foreground/60">
+                        Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
+                      </p>
+                    )}
+                    {prediction.id === "khamis-roche" && adjustedPrediction ? (
+                      <div
+                        className="mt-3 border-t border-card-border pt-3"
+                        title={adjustedPrediction.description ?? undefined}
+                      >
+                        <p className="text-xs text-foreground/60">mit Entwicklungsalter</p>
+                        {adjustedPrediction.value !== null ? (
+                          <p
+                            className="mt-1 text-xl font-semibold"
+                            style={{ color: predictionColors["khamis-roche-adjusted"] }}
+                          >
+                            {formatNumber(adjustedPrediction.value)}{" "}
+                            <span className="text-sm">cm</span>
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-sm text-foreground/60">
+                            Nicht berechenbar. Es fehlt: {adjustedPrediction.missing.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+                    {(() => {
+                      const footer =
+                        prediction.basisDate &&
+                        prediction.basisDate !== analysis.latest?.measured_at
+                          ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                          : prediction.description;
+
+                      return footer ? (
+                        <p className="mt-3 text-xs text-foreground/50">{footer}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                  {prediction.id === "khamis-roche" ? (
                     <div
-                      className="mt-3 border-t border-card-border pt-3"
-                      title={adjustedPrediction.description ?? undefined}
+                      className="rounded-xl border border-card-border bg-card p-5"
+                      style={{
+                        borderTop: `3px solid ${
+                          adjustedPrediction?.value != null
+                            ? predictionColors["khamis-roche-adjusted"]
+                            : predictionColors["khamis-roche"]
+                        }`,
+                      }}
+                      title={
+                        analysis.predictions.some(
+                          (p) => p.id === "khamis-roche-adjusted" && p.value !== null,
+                        )
+                          ? "Aktuelle Größe in % der Khamis-Roche-Zielgröße mit Entwicklungsalter"
+                          : "Aktuelle Größe in % der Khamis-Roche-Zielgröße"
+                      }
                     >
-                      <p className="text-xs text-foreground/60">mit Entwicklungsalter</p>
-                      {adjustedPrediction.value !== null ? (
-                        <p
-                          className="mt-1 text-xl font-semibold"
-                          style={{ color: predictionColors["khamis-roche-adjusted"] }}
-                        >
-                          {formatNumber(adjustedPrediction.value)}{" "}
-                          <span className="text-sm">cm</span>
+                      <p className="text-sm text-foreground/60">Erreicht · Khamis-Roche</p>
+                      {analysis.percentOfTarget !== null ? (
+                        <p className="mt-2 text-3xl font-semibold">
+                          {formatNumber(analysis.percentOfTarget)} %
                         </p>
                       ) : (
-                        <p className="mt-1 text-sm text-foreground/60">
-                          Nicht berechenbar. Es fehlt: {adjustedPrediction.missing.join(", ")}
-                        </p>
+                        <p className="mt-2 text-sm text-foreground/60">Braucht Khamis-Roche</p>
                       )}
                     </div>
                   ) : null}
-                  {(() => {
-                    const footer =
-                      prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
-                        ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
-                        : prediction.description;
-
-                    return footer ? (
-                      <p className="mt-3 text-xs text-foreground/50">{footer}</p>
-                    ) : null;
-                  })()}
-                </div>
+                </Fragment>
               ))}
-
-            <div
-              className="rounded-xl border border-card-border bg-card p-5"
-              title={
-                analysis.predictions.some(
-                  (p) => p.id === "khamis-roche-adjusted" && p.value !== null,
-                )
-                  ? "Aktuelle Größe in % der Khamis-Roche-Zielgröße mit Entwicklungsalter"
-                  : "Aktuelle Größe in % der Khamis-Roche-Zielgröße"
-              }
-            >
-              <p className="text-sm text-foreground/60">Erreichte Zielgröße</p>
-              {analysis.percentOfTarget !== null ? (
-                <p className="mt-2 text-3xl font-semibold">
-                  {formatNumber(analysis.percentOfTarget)} %
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-foreground/60">Braucht Khamis-Roche</p>
-              )}
-            </div>
 
             <div
               className="rounded-xl border border-card-border bg-card p-5"
