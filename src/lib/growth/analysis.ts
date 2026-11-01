@@ -4,7 +4,7 @@ import {
   KHAMIS_ROCHE_MIN_AGE,
   predictKhamisRoche,
 } from "@/lib/growth/khamis-roche";
-import { classifyPhvTiming } from "@/lib/growth/timing";
+import { PHV_TIMING_THRESHOLDS, classifyPhvTiming } from "@/lib/growth/timing";
 import {
   buildVelocitySeries,
   detectPeak,
@@ -123,12 +123,14 @@ export type Prediction = {
 /**
  * Einstufung des Entwicklungstyps.
  * manual: vom Nutzer festgelegt; observed: aus dem beobachteten Gipfel der
- * Wachstumsgeschwindigkeit; estimated: aus der Moore-Schätzung (zieht früh
- * und spät Entwickelnde systematisch Richtung Durchschnitt).
+ * Wachstumsgeschwindigkeit; presumed: möglicherweise spät, weil trotz dichter
+ * Messungen noch kein Gipfel zu sehen ist, obwohl das Alter die Spät-Grenze
+ * überschritten hat; estimated: aus der Moore-Schätzung (zieht früh und spät
+ * Entwickelnde systematisch Richtung Durchschnitt).
  */
 export type TimingAssessment = {
   timing: GrowthMaturity;
-  source: "manual" | "observed" | "estimated";
+  source: "manual" | "observed" | "presumed" | "estimated";
   phvAge: number | null;
 };
 
@@ -149,6 +151,22 @@ export type GrowthAnalysis = {
 /** Moore gilt nur rund um die Pubertät sinnvoll. */
 const ESTIMATE_MIN_AGE = 9;
 const ESTIMATE_MAX_AGE = 17;
+
+/**
+ * Der Gipfel liegt nach der Spät-Grenze, wenn der Spieler schon älter ist und
+ * trotz dichter Messungen noch kein Schub zu sehen ist (oder der höchste Wert
+ * gerade erst nach der Grenze auftritt). Das ist ein Indiz, kein Beweis: Ein
+ * flacher Schub kann im Messrauschen untergehen.
+ */
+function isLateByAbsence(sex: GrowthSex, latestAge: number, peak: PeakResult): boolean {
+  const lateThreshold = PHV_TIMING_THRESHOLDS[sex].late;
+
+  if (peak.reason === "no-spurt") {
+    return latestAge > lateThreshold;
+  }
+
+  return peak.reason === "rising" && peak.highestAge !== null && peak.highestAge > lateThreshold;
+}
 
 export function buildGrowthAnalysis(
   profile: GrowthProfile,
@@ -248,6 +266,8 @@ export function buildGrowthAnalysis(
     timing = { timing: profile.maturity_override, source: "manual", phvAge: peak.age };
   } else if (peak.status === "confirmed" && peak.age !== null) {
     timing = { timing: classifyPhvTiming(sex, peak.age), source: "observed", phvAge: peak.age };
+  } else if (latest && isLateByAbsence(sex, latest.age, peak)) {
+    timing = { timing: "late", source: "presumed", phvAge: null };
   } else if (
     maturity &&
     latest &&

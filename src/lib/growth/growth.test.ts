@@ -200,7 +200,7 @@ const spurtProfile = (overrides: Partial<GrowthProfile> = {}): GrowthProfile => 
 });
 
 describe("velocity and peak detection", () => {
-  it("builds annualised velocities and skips intervals under 3 months", () => {
+  it("builds annualised velocities and merges intervals under about 6 months", () => {
     const series = buildVelocitySeries([
       { age: 10, height_cm: 140, measured_at: "a" },
       { age: 10.1, height_cm: 140.5, measured_at: "b" },
@@ -313,5 +313,76 @@ describe("Khamis-Roche fallback to latest measurement with weight", () => {
     expect(kr?.basisDate).toBe("2025-01-01");
     expect(kr?.value).toBe(analysis.points[0].khamisRoche);
     expect(analysis.percentOfTarget).toBeCloseTo((152 / (kr?.value ?? 1)) * 100, 6);
+  });
+});
+
+/** Gleichmäßiges Wachstum ohne Schub (`velocity` cm/Jahr), Messungen alle `step` Jahre. */
+function flatMeasurements(velocity: number, fromAge: number, toAge: number, step: number) {
+  const result: GrowthMeasurement[] = [];
+  let height = 125;
+
+  for (let age = fromAge; age <= toAge + 1e-9; age += step) {
+    const date = new Date(Date.UTC(2010, 0, 1) + age * 365.25 * 86400000);
+    result.push(measurement({ measured_at: date.toISOString().slice(0, 10), height_cm: height }));
+    height += velocity * step;
+  }
+
+  return result;
+}
+
+describe("rate over at least 6 months and presumed late", () => {
+  it("merges dense quarterly measurements into 6-month rates", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile(), flatMeasurements(5, 9, 11, 0.25));
+
+    expect(analysis.velocity.length).toBeLessThanOrEqual(5);
+    analysis.velocity.forEach((point) => {
+      expect(point.intervalYears).toBeGreaterThanOrEqual(0.45);
+      expect(point.velocity).toBeCloseTo(5, 1);
+    });
+  });
+
+  it("presumes late for a girl past 12.9 without any visible spurt", () => {
+    const analysis = buildGrowthAnalysis(
+      spurtProfile({ sex: "female" }),
+      flatMeasurements(5, 8, 14, 0.25),
+    );
+
+    expect(analysis.peak.status).toBe("pending");
+    expect(analysis.peak.reason).toBe("no-spurt");
+    expect(analysis.timing).toMatchObject({ timing: "late", source: "presumed" });
+  });
+
+  it("does not presume late while the player is younger than the late threshold", () => {
+    const analysis = buildGrowthAnalysis(
+      spurtProfile({ sex: "female" }),
+      flatMeasurements(5, 8, 12, 0.25),
+    );
+
+    expect(analysis.timing?.source).toBe("estimated");
+  });
+
+  it("does not presume late for a boy of 14 (late threshold is 15.1)", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile(), flatMeasurements(5, 8, 14, 0.25));
+
+    expect(analysis.timing?.source).toBe("estimated");
+  });
+
+  it("presumes late when the highest rate is only just after the late threshold", () => {
+    const analysis = buildGrowthAnalysis(
+      spurtProfile({ sex: "female" }),
+      spurtMeasurements(14.5, 8.5, 14.5),
+    );
+
+    expect(analysis.peak.reason).toBe("rising");
+    expect(analysis.timing).toMatchObject({ timing: "late", source: "presumed" });
+  });
+
+  it("lets a manual override beat the presumption", () => {
+    const analysis = buildGrowthAnalysis(
+      spurtProfile({ sex: "female", maturity_override: "average" }),
+      flatMeasurements(5, 8, 14, 0.25),
+    );
+
+    expect(analysis.timing).toMatchObject({ timing: "average", source: "manual" });
   });
 });
