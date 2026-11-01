@@ -63,7 +63,18 @@ export type GrowthProfileFormValues = {
   birthDate: string;
   motherHeight: number | null;
   fatherHeight: number | null;
+  maturityOverride: "early" | "average" | "late" | null;
 };
+
+function parseMaturityOverride(
+  value: FormDataEntryValue | null,
+): "early" | "average" | "late" | null {
+  if (value === "early" || value === "average" || value === "late") {
+    return value;
+  }
+
+  return null;
+}
 
 export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormValues {
   const sex = formData.get("sex");
@@ -77,6 +88,7 @@ export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormVal
     birthDate: requireString(formData.get("birth_date"), "Geburtsdatum"),
     motherHeight: parseNullableNumber(formData.get("mother_height_cm")),
     fatherHeight: parseNullableNumber(formData.get("father_height_cm")),
+    maturityOverride: parseMaturityOverride(formData.get("maturity_override")),
   };
 }
 

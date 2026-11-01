@@ -17,6 +17,7 @@ export type Database = {
     Enums: {
       participant_type: "athlete" | "reference";
       growth_sex: "male" | "female";
+      growth_maturity: "early" | "average" | "late";
     };
     Tables: {
       participants: {
@@ -92,6 +93,7 @@ export type Database = {
           birth_date: string;
           mother_height_cm: number | null;
           father_height_cm: number | null;
+          maturity_override: Database["public"]["Enums"]["growth_maturity"] | null;
           created_at: string;
           updated_at: string;
         };
@@ -101,6 +103,7 @@ export type Database = {
           birth_date: string;
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
+          maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -110,6 +113,7 @@ export type Database = {
           birth_date?: string;
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
+          maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
           created_at?: string;
           updated_at?: string;
         };

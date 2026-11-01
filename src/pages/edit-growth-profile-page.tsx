@@ -140,6 +140,27 @@ export function EditGrowthProfilePage() {
           />
         </div>
 
+        <div>
+          <label htmlFor="maturity_override" className="mb-1 block text-sm font-medium">
+            Entwicklungstyp (optional)
+          </label>
+          <select
+            id="maturity_override"
+            name="maturity_override"
+            defaultValue={profile?.maturity_override ?? ""}
+            className="w-full rounded-lg border border-card-border px-3 py-2"
+          >
+            <option value="">Automatisch aus den Messungen</option>
+            <option value="early">Frühentwickler</option>
+            <option value="average">Normal entwickelt</option>
+            <option value="late">Spätentwickler</option>
+          </select>
+          <p className="mt-1 text-xs text-foreground/50">
+            Überschreibt die automatische Einstufung, z. B. wenn der Verlauf unklar ist oder du den
+            Spieler gut kennst.
+          </p>
+        </div>
+
         <p className="text-xs text-foreground/50">
           Die Größe beider leiblicher Eltern wird für Khamis-Roche und die Elterngröße-Prognose
           benötigt. Selbst angegebene Größen werden meist leicht überschätzt, gemessene Werte sind

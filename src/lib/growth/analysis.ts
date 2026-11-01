@@ -4,7 +4,14 @@ import {
   KHAMIS_ROCHE_MIN_AGE,
   predictKhamisRoche,
 } from "@/lib/growth/khamis-roche";
-import type { GrowthMeasurement, GrowthProfile, GrowthSex } from "@/lib/types";
+import { classifyPhvTiming } from "@/lib/growth/timing";
+import {
+  buildVelocitySeries,
+  detectPeak,
+  type PeakResult,
+  type VelocityPoint,
+} from "@/lib/growth/velocity";
+import type { GrowthMaturity, GrowthMeasurement, GrowthProfile, GrowthSex } from "@/lib/types";
 
 const DAYS_PER_YEAR = 365.25;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -107,8 +114,22 @@ export type Prediction = {
   value: number | null;
   /** Unsicherheitsbereich ± in cm. */
   range: number | null;
+  /** Datum der Messung, auf der die Prognose beruht (nur Khamis-Roche). */
+  basisDate: string | null;
   /** Fehlende Eingaben, falls `value` null ist. */
   missing: string[];
+};
+
+/**
+ * Einstufung des Entwicklungstyps.
+ * manual: vom Nutzer festgelegt; observed: aus dem beobachteten Gipfel der
+ * Wachstumsgeschwindigkeit; estimated: aus der Moore-Schätzung (zieht früh
+ * und spät Entwickelnde systematisch Richtung Durchschnitt).
+ */
+export type TimingAssessment = {
+  timing: GrowthMaturity;
+  source: "manual" | "observed" | "estimated";
+  phvAge: number | null;
 };
 
 export type GrowthAnalysis = {
@@ -116,12 +137,18 @@ export type GrowthAnalysis = {
   latest: GrowthPoint | null;
   predictions: Prediction[];
   maturity: (MaturityOffset & { stage: MaturityStage | null }) | null;
+  /** Aktuelle Größe in % der Khamis-Roche-Zielgröße. */
+  percentOfTarget: number | null;
   /** Wachstumsrate zwischen den letzten beiden Messungen (cm/Jahr). */
   growthVelocity: number | null;
+  velocity: VelocityPoint[];
+  peak: PeakResult;
+  timing: TimingAssessment | null;
 };
 
-/** Messungen, die weniger als 3 Monate auseinander liegen, ergeben keine sinnvolle Jahresrate. */
-const MIN_VELOCITY_INTERVAL_YEARS = 0.25;
+/** Moore gilt nur rund um die Pubertät sinnvoll. */
+const ESTIMATE_MIN_AGE = 9;
+const ESTIMATE_MAX_AGE = 17;
 
 export function buildGrowthAnalysis(
   profile: GrowthProfile,
@@ -156,13 +183,23 @@ export function buildGrowthAnalysis(
 
   const latest = points.at(-1) ?? null;
 
+  // Khamis-Roche braucht das Gewicht. Fehlt es bei der letzten Messung, zählt
+  // die jüngste Messung mit Gewicht; ihre Prognose gilt für die Endgröße und
+  // bleibt daher auch für die aktuelle Größe aussagekräftig.
+  const krBasis = [...points].reverse().find((point) => point.khamisRoche !== null) ?? null;
+
   const krMissing: string[] = [];
   if (!hasParents) krMissing.push("Größe beider Eltern");
-  if (!latest) krMissing.push("Messung");
-  else {
-    if (latest.weight_kg === null) krMissing.push("Gewicht der letzten Messung");
-    if (latest.age < KHAMIS_ROCHE_MIN_AGE || latest.age > KHAMIS_ROCHE_MAX_AGE) {
-      krMissing.push(`Alter zwischen ${KHAMIS_ROCHE_MIN_AGE} und ${KHAMIS_ROCHE_MAX_AGE} Jahren`);
+  if (!krBasis) {
+    const weighted = points.filter((point) => point.weight_kg !== null);
+    if (points.length === 0) {
+      krMissing.push("Messung");
+    } else if (weighted.length === 0) {
+      krMissing.push("Messung mit Gewicht");
+    } else if (hasParents) {
+      krMissing.push(
+        `Messung mit Gewicht im Alter zwischen ${KHAMIS_ROCHE_MIN_AGE} und ${KHAMIS_ROCHE_MAX_AGE} Jahren`,
+      );
     }
   }
 
@@ -171,9 +208,10 @@ export function buildGrowthAnalysis(
       id: "khamis-roche",
       label: "Khamis-Roche",
       description: "Aktuelle Größe, Gewicht, Alter und Elterngröße",
-      value: latest?.khamisRoche ?? null,
+      value: krBasis?.khamisRoche ?? null,
       range: KHAMIS_ROCHE_ERROR_90_CM[sex],
-      missing: latest?.khamisRoche ? [] : krMissing,
+      basisDate: krBasis?.measured_at ?? null,
+      missing: krBasis ? [] : krMissing,
     },
     {
       id: "mid-parent",
@@ -181,9 +219,13 @@ export function buildGrowthAnalysis(
       description: "Genetische Zielgröße, nur aus der Größe der Eltern",
       value: hasParents ? midParentTargetHeight(sex, mother_height_cm, father_height_cm) : null,
       range: MID_PARENT_RANGE_CM,
+      basisDate: null,
       missing: hasParents ? [] : ["Größe beider Eltern"],
     },
   ];
+
+  const percentOfTarget =
+    latest && krBasis?.khamisRoche ? (latest.height_cm / krBasis.khamisRoche) * 100 : null;
 
   const maturity = latest
     ? {
@@ -193,20 +235,41 @@ export function buildGrowthAnalysis(
           heightCm: latest.height_cm,
           sittingHeightCm: latest.sitting_height_cm,
         }),
-        stage:
-          latest.percentPredicted !== null ? maturityStageFromPah(latest.percentPredicted) : null,
+        stage: percentOfTarget !== null ? maturityStageFromPah(percentOfTarget) : null,
       }
     : null;
 
-  let growthVelocity: number | null = null;
-  if (points.length >= 2) {
-    const previous = points[points.length - 2];
-    const current = points[points.length - 1];
-    const years = current.age - previous.age;
-    if (years >= MIN_VELOCITY_INTERVAL_YEARS) {
-      growthVelocity = (current.height_cm - previous.height_cm) / years;
-    }
+  const velocity = buildVelocitySeries(points);
+  const peak = detectPeak(velocity);
+  const growthVelocity = velocity.at(-1)?.velocity ?? null;
+
+  let timing: TimingAssessment | null = null;
+  if (profile.maturity_override) {
+    timing = { timing: profile.maturity_override, source: "manual", phvAge: peak.age };
+  } else if (peak.status === "confirmed" && peak.age !== null) {
+    timing = { timing: classifyPhvTiming(sex, peak.age), source: "observed", phvAge: peak.age };
+  } else if (
+    maturity &&
+    latest &&
+    latest.age >= ESTIMATE_MIN_AGE &&
+    latest.age <= ESTIMATE_MAX_AGE
+  ) {
+    timing = {
+      timing: classifyPhvTiming(sex, maturity.ageAtPhv),
+      source: "estimated",
+      phvAge: maturity.ageAtPhv,
+    };
   }
 
-  return { points, latest, predictions, maturity, growthVelocity };
+  return {
+    points,
+    latest,
+    predictions,
+    maturity,
+    percentOfTarget,
+    growthVelocity,
+    velocity,
+    peak,
+    timing,
+  };
 }

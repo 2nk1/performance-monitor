@@ -5,6 +5,7 @@ export type PerformanceTest = Database["public"]["Tables"]["performance_tests"][
 export type GrowthProfile = Database["public"]["Tables"]["growth_profiles"]["Row"];
 export type GrowthMeasurement = Database["public"]["Tables"]["growth_measurements"]["Row"];
 export type GrowthSex = Database["public"]["Enums"]["growth_sex"];
+export type GrowthMaturity = Database["public"]["Enums"]["growth_maturity"];
 
 export type ComparisonMetric =
   | "reach_height"

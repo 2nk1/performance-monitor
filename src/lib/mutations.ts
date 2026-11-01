@@ -113,6 +113,7 @@ export async function saveGrowthProfile(participantId: string, input: GrowthProf
     birth_date: input.birthDate,
     mother_height_cm: input.motherHeight,
     father_height_cm: input.fatherHeight,
+    maturity_override: input.maturityOverride,
     updated_at: new Date().toISOString(),
   });
 
