@@ -160,3 +160,16 @@ export function referenceCurve(
 
   return result;
 }
+
+/**
+ * Mittlere Wachstumsrate der Referenz in cm pro Jahr: Differenz der
+ * Mediankurve über ein Jahr (Alter ± 0,5). Das ist eine grobe Orientierung:
+ * Die Referenz stammt aus einer Querschnittserhebung und glättet den Schub,
+ * die Spitzenrate einzelner Kinder liegt deutlich höher.
+ */
+export function referenceVelocity(sex: GrowthSex, age: number): number | null {
+  const before = referenceAt(sex, age - 0.5);
+  const after = referenceAt(sex, age + 0.5);
+
+  return before && after ? after.p50 - before.p50 : null;
+}

@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { GrowthSex } from "@/lib/types";
+import { referenceVelocity } from "@/lib/growth/percentiles";
 import { PHV_TIMING_THRESHOLDS } from "@/lib/growth/timing";
 import type { PeakResult, VelocityPoint } from "@/lib/growth/velocity";
 import { getSeriesColor } from "@/lib/series-colors";
@@ -32,7 +33,9 @@ type GrowthVelocityChartProps = {
 const formatNumber = (value: number) => value.toFixed(1).replace(".", ",");
 
 export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChartProps) {
-  const data = velocity
+  type Row = { age: number; velocity?: number; smoothed?: number; reference?: number };
+
+  const data: Row[] = velocity
     .filter((point) => point.age >= MIN_DISPLAY_AGE)
     .map((point) => ({ age: point.age, velocity: point.velocity, smoothed: point.smoothed }));
 
@@ -47,7 +50,24 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
   const { early, late } = PHV_TIMING_THRESHOLDS[sex];
   const xMin = Math.floor(Math.min(data[0].age, early - 1));
   const xMax = Math.ceil(Math.max(data[data.length - 1].age, late + 1));
-  const yMax = Math.ceil(Math.max(...data.map((point) => point.velocity), 10) + 1);
+
+  // Referenzrate (KiGGS-Median) im gezeigten Altersbereich, in Vierteljahresschritten.
+  const reference: Row[] = [];
+  for (let age = Math.ceil(xMin * 4) / 4; age <= xMax + 1e-9; age += 0.25) {
+    const value = referenceVelocity(sex, age);
+
+    if (value !== null) {
+      reference.push({ age, reference: value });
+    }
+  }
+
+  const yMax = Math.ceil(
+    Math.max(
+      ...data.map((point) => point.velocity ?? 0),
+      ...reference.map((point) => point.reference ?? 0),
+      10,
+    ) + 1,
+  );
 
   const bands = [
     { key: "early", label: "früh", x1: xMin, x2: early },
@@ -56,6 +76,7 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
   ] as const;
 
   const markerAge = peak.age;
+  const rows = [...data, ...reference].sort((a, b) => a.age - b.age);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
@@ -70,6 +91,21 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
             style={{ background: LINE_COLOR, opacity: 0.5 }}
           />
           je Messintervall
+        </span>
+        <span className="flex items-center gap-2">
+          <svg width="22" height="8" aria-hidden>
+            <line
+              x1="0"
+              y1="4"
+              x2="22"
+              y2="4"
+              stroke="var(--color-foreground)"
+              strokeOpacity="0.5"
+              strokeWidth="2"
+              strokeDasharray="2 3"
+            />
+          </svg>
+          KiGGS-Median
         </span>
         {bands.map((band) => (
           <span key={band.key} className="flex items-center gap-2">
@@ -86,7 +122,7 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
         responsive
         width="100%"
         height={300}
-        data={data}
+        data={rows}
         margin={{ top: 10, right: 20, bottom: 10, left: 10 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-card-border)" />
@@ -150,6 +186,19 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
         />
 
         <Line
+          type="monotone"
+          dataKey="reference"
+          stroke="var(--color-foreground)"
+          strokeOpacity={0.5}
+          strokeWidth={1.5}
+          strokeDasharray="2 3"
+          dot={false}
+          activeDot={false}
+          connectNulls
+          tooltipType="none"
+          isAnimationActive={false}
+        />
+        <Line
           type="linear"
           dataKey="velocity"
           stroke="none"
@@ -160,6 +209,7 @@ export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChart
         <Line
           type="monotone"
           dataKey="smoothed"
+          connectNulls
           stroke={LINE_COLOR}
           strokeWidth={2.5}
           dot={false}

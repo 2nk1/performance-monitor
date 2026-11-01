@@ -5,6 +5,7 @@ import {
   heightZScore,
   referenceAt,
   referenceCurve,
+  referenceVelocity,
 } from "@/lib/growth/percentiles";
 import { KIGGS_HEIGHT } from "@/lib/growth/reference/kiggs-height";
 
@@ -86,5 +87,25 @@ describe("percentiles", () => {
     expect(formatPercentile(0.4)).toBe("<1");
     expect(formatPercentile(99.6)).toBe(">99");
     expect(formatPercentile(23.4)).toBe("23");
+  });
+});
+
+describe("referenceVelocity", () => {
+  it("is the one-year difference of the median", () => {
+    const after = referenceAt("female", 14.5)?.p50 ?? 0;
+    const before = referenceAt("female", 13.5)?.p50 ?? 0;
+
+    expect(referenceVelocity("female", 14)).toBeCloseTo(after - before, 10);
+  });
+
+  it("is low for girls at 14 and clearly higher for boys at 13", () => {
+    expect(referenceVelocity("female", 14)).toBeGreaterThan(1.5);
+    expect(referenceVelocity("female", 14)).toBeLessThan(3.5);
+    expect(referenceVelocity("male", 13)).toBeGreaterThan(6);
+  });
+
+  it("returns null near the edges of the reference range", () => {
+    expect(referenceVelocity("male", 0.2)).toBeNull();
+    expect(referenceVelocity("male", 17.8)).toBeNull();
   });
 });
