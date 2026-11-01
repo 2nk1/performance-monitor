@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { GrowthChart } from "@/components/growth-chart";
+import { GrowthVelocityChart } from "@/components/growth-velocity-chart";
 import {
   fetchGrowthMeasurementsByParticipant,
   fetchGrowthProfile,
@@ -11,6 +12,7 @@ import {
 import { formatTestDate } from "@/lib/format";
 import { ageInYears, buildGrowthAnalysis, maturityStageLabels } from "@/lib/growth/analysis";
 import { predictionColors } from "@/lib/growth/colors";
+import { timingLabels } from "@/lib/growth/timing";
 import { NotFoundPage } from "@/pages/not-found-page";
 
 const formatNumber = (value: number, decimals = 1) =>
@@ -155,56 +157,67 @@ export function AthleteGrowthPage() {
                     Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
                   </p>
                 )}
-                <p className="mt-3 text-xs text-foreground/50">{prediction.description}</p>
+                <p className="mt-3 text-xs text-foreground/50">
+                  {prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
+                    ? `Stand: Messung vom ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                    : prediction.description}
+                </p>
               </div>
             ))}
 
             <div className="rounded-xl border border-card-border bg-card p-5">
               <p className="text-sm text-foreground/60">Reifestatus</p>
-              {analysis.maturity ? (
+              {analysis.percentOfTarget !== null ? (
                 <>
                   <p className="mt-2 text-3xl font-semibold">
-                    {analysis.latest?.percentPredicted
-                      ? `${formatNumber(analysis.latest.percentPredicted)} %`
-                      : "–"}
+                    {formatNumber(analysis.percentOfTarget)} %
                   </p>
                   <p className="mt-1 text-sm text-foreground/60">
-                    {analysis.maturity.stage
-                      ? maturityStageLabels[analysis.maturity.stage]
-                      : "% der Endgröße braucht Khamis-Roche"}
+                    {analysis.maturity?.stage ? maturityStageLabels[analysis.maturity.stage] : ""}
                   </p>
                   <p className="mt-3 text-xs text-foreground/50">
-                    Erreichter Anteil der Khamis-Roche-Prognose
+                    Aktuelle Größe im Verhältnis zur Khamis-Roche-Zielgröße
                   </p>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-foreground/60">Noch keine Messung.</p>
+                <p className="mt-2 text-sm text-foreground/60">
+                  Nicht berechenbar, braucht die Khamis-Roche-Zielgröße.
+                </p>
               )}
             </div>
 
             <div className="rounded-xl border border-card-border bg-card p-5">
-              <p className="text-sm text-foreground/60">Wachstumsschub (PHV)</p>
-              {analysis.maturity ? (
+              <p className="text-sm text-foreground/60">Entwicklungstyp</p>
+              {analysis.timing ? (
                 <>
-                  <p className="mt-2 text-3xl font-semibold">
-                    {formatNumber(analysis.maturity.ageAtPhv)} <span className="text-lg">J.</span>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {timingLabels[analysis.timing.timing]}
                   </p>
                   <p className="mt-1 text-sm text-foreground/60">
-                    {Math.abs(analysis.maturity.offsetYears) < 0.25
-                      ? "aktuell im Wachstumsschub"
-                      : analysis.maturity.offsetYears < 0
-                        ? `in ca. ${formatNumber(-analysis.maturity.offsetYears)} Jahren`
-                        : `vor ca. ${formatNumber(analysis.maturity.offsetYears)} Jahren`}
+                    {analysis.timing.source === "manual"
+                      ? "Manuell festgelegt"
+                      : analysis.timing.source === "observed"
+                        ? `Gipfel bei ${formatNumber(analysis.timing.phvAge ?? 0)} J. (beobachtet)`
+                        : `Wachstumsschub geschätzt bei ${formatNumber(analysis.timing.phvAge ?? 0)} J.`}
                     {analysis.growthVelocity !== null
                       ? ` · aktuell ${formatNumber(analysis.growthVelocity)} cm/Jahr`
                       : ""}
                   </p>
                   <p className="mt-3 text-xs text-foreground/50">
-                    {analysis.maturity.equation}, ±0,5 Jahre
+                    {analysis.timing.source === "estimated"
+                      ? `Schätzung nach Moore (${analysis.maturity?.equation}, ±0,5 Jahre). Sie zieht Früh- und Spätentwickler Richtung Durchschnitt, Bestätigung durch den beobachteten Gipfel folgt.`
+                      : analysis.timing.source === "manual"
+                        ? analysis.peak.status === "confirmed"
+                          ? `Automatisch beobachtet: Gipfel bei ${formatNumber(analysis.peak.age ?? 0)} J.`
+                          : analysis.peak.note
+                        : `Spitze ${formatNumber(analysis.peak.velocity ?? 0)} cm/Jahr`}
                   </p>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-foreground/60">Noch keine Messung.</p>
+                <>
+                  <p className="mt-2 text-sm text-foreground/60">Noch nicht einstufbar.</p>
+                  <p className="mt-3 text-xs text-foreground/50">{analysis.peak.note}</p>
+                </>
               )}
             </div>
           </section>
@@ -216,6 +229,26 @@ export function AthleteGrowthPage() {
               Schattierte Bereiche: Unsicherheit der Prognose (Khamis-Roche: 90-%-Fehlergrenze,
               Elterngröße: ±8,5 cm). Khamis-Roche gilt von 4 bis 17,5 Jahren und ist rund um den
               Wachstumsschub am ungenauesten, besonders bei sehr frühen oder späten Entwicklern.
+            </p>
+          </section>
+
+          <section className="mb-10">
+            <h2 className="mb-4 text-lg font-semibold">Wachstumsgeschwindigkeit</h2>
+            <GrowthVelocityChart
+              velocity={analysis.velocity}
+              sex={profile.sex}
+              peak={analysis.peak}
+              estimatedPhvAge={
+                analysis.timing?.source === "estimated" ? analysis.timing.phvAge : null
+              }
+            />
+            <p className="mt-3 text-xs text-foreground/50">
+              {analysis.peak.status === "confirmed"
+                ? `Der Gipfel der Wachstumsgeschwindigkeit wurde beobachtet. `
+                : `${analysis.peak.note} `}
+              Die Bänder zeigen, in welchem Alter der Gipfel bei früh, normal und spät entwickelnden{" "}
+              {profile.sex === "male" ? "Jungen" : "Mädchen"} liegt (Kozieł & Malina 2018). Einzelne
+              Intervalle schwanken durch Messfehler, die Linie ist deshalb geglättet.
             </p>
           </section>
 

@@ -208,7 +208,7 @@ export async function fetchGrowthProfile(id: string): Promise<GrowthProfile | nu
   const { data, error } = await supabase
     .from("growth_profiles")
     .select(
-      "participant_id, sex, birth_date, mother_height_cm, father_height_cm, created_at, updated_at",
+      "participant_id, sex, birth_date, mother_height_cm, father_height_cm, maturity_override, created_at, updated_at",
     )
     .eq("participant_id", id)
     .maybeSingle();

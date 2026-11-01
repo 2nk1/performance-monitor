@@ -73,7 +73,7 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
           <LegendItem
             key={prediction.id}
             color={predictionColors[prediction.id]}
-            label={`Zielgröße ${prediction.label}`}
+            label={`Zielgröße ${prediction.label}: ${formatCm(prediction.value)}`}
             dashed
           />
         ))}
@@ -133,12 +133,6 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
             stroke={predictionColors[prediction.id]}
             strokeDasharray="6 4"
             strokeWidth={2}
-            label={{
-              value: `${prediction.label}: ${formatCm(prediction.value)}`,
-              position: "insideTopRight",
-              fill: predictionColors[prediction.id],
-              fontSize: 12,
-            }}
           />
         ))}
 
