@@ -243,7 +243,8 @@ describe("velocity and peak detection", () => {
 
     expect(analysis.peak.status).toBe("pending");
     expect(analysis.peak.age).toBeNull();
-    expect(analysis.timing?.source).toBe("estimated");
+    expect(analysis.timing).toBeNull();
+    expect(analysis.phvEstimate).not.toBeNull();
   });
 
   it("reports insufficient data for few measurements", () => {
@@ -341,7 +342,7 @@ describe("rate over at least 6 months and presumed late", () => {
     });
   });
 
-  it("presumes late for a girl past 12.9 without any visible spurt", () => {
+  it("classifies a girl past 12.9 without any visible spurt as late (presumed)", () => {
     const analysis = buildGrowthAnalysis(
       spurtProfile({ sex: "female" }),
       flatMeasurements(5, 8, 14, 0.25),
@@ -358,13 +359,14 @@ describe("rate over at least 6 months and presumed late", () => {
       flatMeasurements(5, 8, 12, 0.25),
     );
 
-    expect(analysis.timing?.source).toBe("estimated");
+    expect(analysis.timing).toBeNull();
+    expect(analysis.phvEstimate).not.toBeNull();
   });
 
   it("does not presume late for a boy of 14 (late threshold is 15.1)", () => {
     const analysis = buildGrowthAnalysis(spurtProfile(), flatMeasurements(5, 8, 14, 0.25));
 
-    expect(analysis.timing?.source).toBe("estimated");
+    expect(analysis.timing).toBeNull();
   });
 
   it("presumes late when the highest rate is only just after the late threshold", () => {
@@ -384,5 +386,21 @@ describe("rate over at least 6 months and presumed late", () => {
     );
 
     expect(analysis.timing).toMatchObject({ timing: "average", source: "manual" });
+  });
+});
+
+describe("no classification from the Moore estimate alone", () => {
+  it("returns no timing for a boy far before the spurt, but still the estimate as a number", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile(), flatMeasurements(5, 7, 11.5, 0.25));
+
+    expect(analysis.timing).toBeNull();
+    expect(analysis.phvEstimate?.age).toBeGreaterThan(11);
+    expect(analysis.phvEstimate?.equation).toContain("Moore");
+  });
+
+  it("returns no estimate outside the age range where Moore is meaningful", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile(), flatMeasurements(5, 3, 7.5, 0.25));
+
+    expect(analysis.phvEstimate).toBeNull();
   });
 });

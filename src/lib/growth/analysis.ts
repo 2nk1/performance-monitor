@@ -123,14 +123,16 @@ export type Prediction = {
 /**
  * Einstufung des Entwicklungstyps.
  * manual: vom Nutzer festgelegt; observed: aus dem beobachteten Gipfel der
- * Wachstumsgeschwindigkeit; presumed: möglicherweise spät, weil trotz dichter
- * Messungen noch kein Gipfel zu sehen ist, obwohl das Alter die Spät-Grenze
- * überschritten hat; estimated: aus der Moore-Schätzung (zieht früh und spät
- * Entwickelnde systematisch Richtung Durchschnitt).
+ * Wachstumsgeschwindigkeit; presumed: spät, weil trotz dichter Messungen noch
+ * kein Gipfel zu sehen ist, obwohl das Alter die Spät-Grenze überschritten hat
+ * (der Gipfel liegt dann zwangsläufig danach).
+ *
+ * Aus der Moore-Schätzung allein wird bewusst nicht eingestuft: Sie ist bei
+ * Spätentwicklern zu früh und weit vor der Pubertät sehr unsicher.
  */
 export type TimingAssessment = {
   timing: GrowthMaturity;
-  source: "manual" | "observed" | "presumed" | "estimated";
+  source: "manual" | "observed" | "presumed";
   phvAge: number | null;
 };
 
@@ -146,6 +148,8 @@ export type GrowthAnalysis = {
   velocity: VelocityPoint[];
   peak: PeakResult;
   timing: TimingAssessment | null;
+  /** Moore-Schätzung für das Alter beim Wachstumsschub, nur als Zahl und ohne Einstufung. */
+  phvEstimate: { age: number; equation: string } | null;
 };
 
 /** Moore gilt nur rund um die Pubertät sinnvoll. */
@@ -268,18 +272,12 @@ export function buildGrowthAnalysis(
     timing = { timing: classifyPhvTiming(sex, peak.age), source: "observed", phvAge: peak.age };
   } else if (latest && isLateByAbsence(sex, latest.age, peak)) {
     timing = { timing: "late", source: "presumed", phvAge: null };
-  } else if (
-    maturity &&
-    latest &&
-    latest.age >= ESTIMATE_MIN_AGE &&
-    latest.age <= ESTIMATE_MAX_AGE
-  ) {
-    timing = {
-      timing: classifyPhvTiming(sex, maturity.ageAtPhv),
-      source: "estimated",
-      phvAge: maturity.ageAtPhv,
-    };
   }
+
+  const phvEstimate =
+    maturity && latest && latest.age >= ESTIMATE_MIN_AGE && latest.age <= ESTIMATE_MAX_AGE
+      ? { age: maturity.ageAtPhv, equation: maturity.equation }
+      : null;
 
   return {
     points,
@@ -291,5 +289,6 @@ export function buildGrowthAnalysis(
     velocity,
     peak,
     timing,
+    phvEstimate,
   };
 }

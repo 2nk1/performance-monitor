@@ -27,18 +27,11 @@ type GrowthVelocityChartProps = {
   velocity: VelocityPoint[];
   sex: GrowthSex;
   peak: PeakResult;
-  /** Geschätztes Alter beim Wachstumsschub (Moore), falls der Gipfel noch nicht beobachtet ist. */
-  estimatedPhvAge: number | null;
 };
 
 const formatNumber = (value: number) => value.toFixed(1).replace(".", ",");
 
-export function GrowthVelocityChart({
-  velocity,
-  sex,
-  peak,
-  estimatedPhvAge,
-}: GrowthVelocityChartProps) {
+export function GrowthVelocityChart({ velocity, sex, peak }: GrowthVelocityChartProps) {
   const data = velocity
     .filter((point) => point.age >= MIN_DISPLAY_AGE)
     .map((point) => ({ age: point.age, velocity: point.velocity, smoothed: point.smoothed }));
@@ -62,7 +55,7 @@ export function GrowthVelocityChart({
     { key: "late", label: "spät", x1: late, x2: xMax },
   ] as const;
 
-  const markerAge = peak.age ?? estimatedPhvAge;
+  const markerAge = peak.age;
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
@@ -131,12 +124,8 @@ export function GrowthVelocityChart({
             x={markerAge}
             stroke="var(--color-foreground)"
             strokeWidth={2}
-            strokeDasharray={peak.age !== null ? undefined : "6 4"}
             label={{
-              value:
-                peak.age !== null
-                  ? `Gipfel ${formatNumber(markerAge)} J.`
-                  : `geschätzt ${formatNumber(markerAge)} J.`,
+              value: `Gipfel ${formatNumber(markerAge)} J.`,
               position: "insideTopRight",
               fill: "var(--color-foreground)",
               fontSize: 12,
