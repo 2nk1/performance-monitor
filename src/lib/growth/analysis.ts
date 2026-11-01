@@ -110,7 +110,7 @@ export type PredictionModelId = "khamis-roche" | "mid-parent";
 export type Prediction = {
   id: PredictionModelId;
   label: string;
-  description: string;
+  description: string | null;
   value: number | null;
   /** Unsicherheitsbereich ± in cm. */
   range: number | null;
@@ -207,7 +207,7 @@ export function buildGrowthAnalysis(
     {
       id: "khamis-roche",
       label: "Khamis-Roche",
-      description: "Aktuelle Größe, Gewicht, Alter und Elterngröße",
+      description: null,
       value: krBasis?.khamisRoche ?? null,
       range: KHAMIS_ROCHE_ERROR_90_CM[sex],
       basisDate: krBasis?.measured_at ?? null,

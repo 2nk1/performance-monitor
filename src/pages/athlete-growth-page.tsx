@@ -157,11 +157,16 @@ export function AthleteGrowthPage() {
                     Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
                   </p>
                 )}
-                <p className="mt-3 text-xs text-foreground/50">
-                  {prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
-                    ? `Stand: Messung vom ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
-                    : prediction.description}
-                </p>
+                {(() => {
+                  const footer =
+                    prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
+                      ? `Stand: Messung vom ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                      : prediction.description;
+
+                  return footer ? (
+                    <p className="mt-3 text-xs text-foreground/50">{footer}</p>
+                  ) : null;
+                })()}
               </div>
             ))}
 
