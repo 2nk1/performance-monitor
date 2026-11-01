@@ -245,10 +245,16 @@ export function AthleteGrowthPage() {
 
           <section className="mb-10">
             <h2 className="mb-4 text-lg font-semibold">Wachstumskurve</h2>
-            <GrowthChart points={analysis.points} predictions={analysis.predictions} />
+            <GrowthChart
+              points={analysis.points}
+              predictions={analysis.predictions}
+              projection={analysis.projection}
+            />
             <p className="mt-3 text-xs text-foreground/50">
               Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm).
-              Khamis-Roche gilt für 4 bis 17,5 Jahre.
+              Khamis-Roche gilt für 4 bis 17,5 Jahre. Fortschreibung: aktuelle Rate, die linear bis{" "}
+              {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
+              Wachstumsschub.
             </p>
           </section>
 
