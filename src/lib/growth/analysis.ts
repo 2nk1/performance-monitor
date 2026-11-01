@@ -5,6 +5,7 @@ import {
   predictKhamisRoche,
 } from "@/lib/growth/khamis-roche";
 import { PHV_TIMING_THRESHOLDS, classifyPhvTiming } from "@/lib/growth/timing";
+import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
 import {
   buildVelocitySeries,
   detectPeak,
@@ -130,6 +131,8 @@ export type GrowthAnalysis = {
   timing: TimingAssessment | null;
   /** Moore-Schätzung für das Alter beim Wachstumsschub, nur als Zahl und ohne Einstufung. */
   phvEstimate: { age: number; equation: string } | null;
+  /** Fortschreibung der Größenkurve (Trend, kein Prognosemodell). */
+  projection: ProjectionPoint[] | null;
 };
 
 /** Moore gilt nur rund um die Pubertät sinnvoll. */
@@ -267,5 +270,6 @@ export function buildGrowthAnalysis(
     peak,
     timing,
     phvEstimate,
+    projection: projectGrowth(points, sex),
   };
 }

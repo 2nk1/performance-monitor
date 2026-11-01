@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { GrowthPoint, Prediction } from "@/lib/growth/analysis";
+import type { ProjectionPoint } from "@/lib/growth/projection";
 import { predictionColors } from "@/lib/growth/colors";
 import { getSeriesColor } from "@/lib/series-colors";
 
@@ -17,12 +18,13 @@ const HEIGHT_COLOR = getSeriesColor(0);
 type GrowthChartProps = {
   points: GrowthPoint[];
   predictions: Prediction[];
+  projection: ProjectionPoint[] | null;
 };
 
 const formatAge = (age: number) => `${age.toFixed(1).replace(".", ",")} J.`;
 const formatCm = (value: number) => `${value.toFixed(1).replace(".", ",")} cm`;
 
-export function GrowthChart({ points, predictions }: GrowthChartProps) {
+export function GrowthChart({ points, predictions, projection }: GrowthChartProps) {
   if (points.length === 0) {
     return (
       <div className="flex h-72 items-center justify-center rounded-xl border border-card-border bg-card text-sm text-foreground/60">
@@ -37,11 +39,16 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
   );
 
   const xMin = Math.floor(points[0].age) - 0.5;
-  const xMax = Math.max(18.5, Math.ceil(latest.age) + 1);
+  const xMax = Math.max(
+    18.5,
+    Math.ceil(latest.age) + 1,
+    Math.ceil(projection?.at(-1)?.age ?? 0) + 0.5,
+  );
 
   const yValues = [
     ...points.map((point) => point.height_cm),
     ...points.flatMap((point) => (point.khamisRoche !== null ? [point.khamisRoche] : [])),
+    ...(projection?.map((point) => point.height) ?? []),
     ...available.flatMap((prediction) => [
       prediction.value - (prediction.range ?? 0),
       prediction.value + (prediction.range ?? 0),
@@ -51,11 +58,22 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
   const yMax = Math.ceil((Math.max(...yValues) + 3) / 10) * 10;
   const yTicks = Array.from({ length: (yMax - yMin) / 10 + 1 }, (_, i) => yMin + i * 10);
 
-  const data = points.map((point) => ({
+  type Row = {
+    age: number;
+    height?: number;
+    khamisRoche?: number | null;
+    projected?: number;
+  };
+
+  const data: Row[] = points.map((point, index) => ({
     age: point.age,
     height: point.height_cm,
     khamisRoche: point.khamisRoche,
+    // Die Fortschreibung beginnt an der letzten Messung, damit die Linie anschließt.
+    ...(projection && index === points.length - 1 ? { projected: point.height_cm } : {}),
   }));
+
+  projection?.slice(1).forEach((point) => data.push({ age: point.age, projected: point.height }));
   const hasKrHistory = points.some((point) => point.khamisRoche !== null);
 
   return (
@@ -69,6 +87,7 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
             dashed
           />
         ) : null}
+        {projection ? <LegendItem color={HEIGHT_COLOR} label="Fortschreibung" dashed /> : null}
         {available.map((prediction) => (
           <LegendItem
             key={prediction.id}
@@ -140,7 +159,11 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
           labelFormatter={(value) => `Alter ${formatAge(Number(value))}`}
           formatter={(value, name) => [
             formatCm(Number(value)),
-            name === "height" ? "Größe" : "Khamis-Roche-Prognose",
+            name === "height"
+              ? "Größe"
+              : name === "projected"
+                ? "Fortschreibung"
+                : "Khamis-Roche-Prognose",
           ]}
           contentStyle={{
             backgroundColor: "var(--color-header)",
@@ -160,6 +183,20 @@ export function GrowthChart({ points, predictions }: GrowthChartProps) {
             strokeDasharray="4 3"
             strokeWidth={1.5}
             dot={{ r: 3, fill: predictionColors["khamis-roche"] }}
+            connectNulls
+            isAnimationActive={false}
+          />
+        ) : null}
+
+        {projection ? (
+          <Line
+            type="linear"
+            dataKey="projected"
+            stroke={HEIGHT_COLOR}
+            strokeDasharray="6 4"
+            strokeWidth={2}
+            dot={false}
+            activeDot={false}
             connectNulls
             isAnimationActive={false}
           />
