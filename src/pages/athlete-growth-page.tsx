@@ -10,9 +10,15 @@ import {
   queryKeys,
 } from "@/lib/data";
 import { formatTestDate } from "@/lib/format";
-import { ageInYears, buildGrowthAnalysis, maturityStageLabels } from "@/lib/growth/analysis";
+import {
+  ageInYears,
+  buildGrowthAnalysis,
+  maturityStageLabels,
+  type GrowthAnalysis,
+} from "@/lib/growth/analysis";
 import { predictionColors } from "@/lib/growth/colors";
-import { timingLabels } from "@/lib/growth/timing";
+import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
+import type { GrowthSex } from "@/lib/types";
 import { NotFoundPage } from "@/pages/not-found-page";
 
 const formatNumber = (value: number, decimals = 1) =>
@@ -20,6 +26,42 @@ const formatNumber = (value: number, decimals = 1) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+
+function timingHeadline(
+  timing: NonNullable<GrowthAnalysis["timing"]>,
+  latestAge: number | null,
+  sex: GrowthSex,
+): string {
+  switch (timing.source) {
+    case "manual":
+      return "Manuell festgelegt";
+    case "observed":
+      return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J. (beobachtet)`;
+    case "presumed":
+      return `Bis ${formatNumber(latestAge ?? 0)} J. noch kein Gipfel (Spät-Grenze ${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.)`;
+    case "estimated":
+      return `Wachstumsschub geschätzt bei ${formatNumber(timing.phvAge ?? 0)} J.`;
+  }
+}
+
+function timingFootnote(
+  source: NonNullable<GrowthAnalysis["timing"]>["source"],
+  peak: GrowthAnalysis["peak"],
+  equation: string | undefined,
+): string {
+  switch (source) {
+    case "estimated":
+      return `Schätzung nach Moore (${equation}, ±0,5 Jahre). Sie zieht Früh- und Spätentwickler Richtung Durchschnitt, Bestätigung durch den beobachteten Gipfel folgt.`;
+    case "presumed":
+      return "Vorläufig: Trotz regelmäßiger Messungen ist noch kein Wachstumsschub zu sehen. Ein flacher Schub kann im Messrauschen untergehen, Bestätigung folgt mit dem beobachteten Gipfel.";
+    case "manual":
+      return peak.status === "confirmed"
+        ? `Automatisch beobachtet: Gipfel bei ${formatNumber(peak.age ?? 0)} J.`
+        : peak.note;
+    case "observed":
+      return `Spitze ${formatNumber(peak.velocity ?? 0)} cm/Jahr`;
+  }
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -196,26 +238,22 @@ export function AthleteGrowthPage() {
               {analysis.timing ? (
                 <>
                   <p className="mt-2 text-2xl font-semibold">
-                    {timingLabels[analysis.timing.timing]}
+                    {analysis.timing.source === "presumed"
+                      ? "Möglicherweise spät"
+                      : timingLabels[analysis.timing.timing]}
                   </p>
                   <p className="mt-1 text-sm text-foreground/60">
-                    {analysis.timing.source === "manual"
-                      ? "Manuell festgelegt"
-                      : analysis.timing.source === "observed"
-                        ? `Gipfel bei ${formatNumber(analysis.timing.phvAge ?? 0)} J. (beobachtet)`
-                        : `Wachstumsschub geschätzt bei ${formatNumber(analysis.timing.phvAge ?? 0)} J.`}
+                    {timingHeadline(analysis.timing, analysis.latest?.age ?? null, profile.sex)}
                     {analysis.growthVelocity !== null
                       ? ` · aktuell ${formatNumber(analysis.growthVelocity)} cm/Jahr`
                       : ""}
                   </p>
                   <p className="mt-3 text-xs text-foreground/50">
-                    {analysis.timing.source === "estimated"
-                      ? `Schätzung nach Moore (${analysis.maturity?.equation}, ±0,5 Jahre). Sie zieht Früh- und Spätentwickler Richtung Durchschnitt, Bestätigung durch den beobachteten Gipfel folgt.`
-                      : analysis.timing.source === "manual"
-                        ? analysis.peak.status === "confirmed"
-                          ? `Automatisch beobachtet: Gipfel bei ${formatNumber(analysis.peak.age ?? 0)} J.`
-                          : analysis.peak.note
-                        : `Spitze ${formatNumber(analysis.peak.velocity ?? 0)} cm/Jahr`}
+                    {timingFootnote(
+                      analysis.timing.source,
+                      analysis.peak,
+                      analysis.maturity?.equation,
+                    )}
                   </p>
                 </>
               ) : (

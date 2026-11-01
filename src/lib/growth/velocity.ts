@@ -1,5 +1,9 @@
-/** Messungen, die weniger als 3 Monate auseinander liegen, ergeben keine sinnvolle Jahresrate. */
-export const MIN_INTERVAL_YEARS = 0.25;
+/**
+ * Die Rate wird über mindestens etwa 6 Monate gerechnet (5,5 Monate, damit
+ * halbjährliche Messungen zählen). Kürzere Abstände machen aus kleinen
+ * Messfehlern große Schwankungen in der Jahresrate.
+ */
+export const MIN_INTERVAL_YEARS = 0.45;
 
 /** Intervalle über 1,5 Jahre sind für die Gipfelerkennung zu grob. */
 const MAX_PEAK_INTERVAL_YEARS = 1.5;
@@ -83,6 +87,15 @@ export type PeakResult = {
    * insufficient: zu wenige Messungen für eine Aussage.
    */
   status: "confirmed" | "pending" | "insufficient";
+  /**
+   * Warum der Gipfel nicht bestätigt ist:
+   * no-spurt: Geschwindigkeit blieb durchweg unter der Schwelle, es ist noch kein Schub zu sehen.
+   * rising: der höchste Wert liegt bei den letzten Messungen.
+   * no-rise / no-drop: Anstieg bzw. Abfall wurden nicht beobachtet.
+   */
+  reason: "confirmed" | "insufficient" | "no-spurt" | "rising" | "no-rise" | "no-drop";
+  /** Alter beim höchsten beobachteten Wert (Intervallmitte), auch wenn er noch nicht bestätigt ist. */
+  highestAge: number | null;
   /** Alter beim Gipfel (Intervallmitte), nur bei `confirmed`. */
   age: number | null;
   /** Geglättete Spitzengeschwindigkeit in cm/Jahr, nur bei `confirmed`. */
@@ -102,6 +115,8 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
   if (candidates.length < MIN_CANDIDATE_INTERVALS) {
     return {
       status: "insufficient",
+      reason: "insufficient",
+      highestAge: null,
       age: null,
       velocity: null,
       note: "Zu wenige Messungen: Für die Gipfelerkennung braucht es mindestens 5 Messungen zwischen 8 und 18 Jahren im Abstand von höchstens 1,5 Jahren.",
@@ -120,8 +135,10 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
   const before = candidates.slice(0, peakIndex);
   const after = candidates.slice(peakIndex + 1);
 
-  const pending = (note: string): PeakResult => ({
+  const pending = (reason: PeakResult["reason"], note: string): PeakResult => ({
     status: "pending",
+    reason,
+    highestAge: peak.age,
     age: null,
     velocity: null,
     note,
@@ -129,18 +146,21 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
 
   if (peak.smoothed < MIN_PEAK_VELOCITY) {
     return pending(
+      "no-spurt",
       "Noch kein Wachstumsschub erkennbar: Die Geschwindigkeit liegt unter 6,5 cm/Jahr.",
     );
   }
 
   if (after.length < 2) {
     return pending(
+      "rising",
       "Der höchste Wert liegt bei den letzten Messungen. Eine Bestätigung braucht zwei weitere Messungen.",
     );
   }
 
   if (!before.some((point) => point.smoothed <= limit)) {
     return pending(
+      "no-rise",
       "Der Anstieg wurde nicht beobachtet, der Schub lag möglicherweise vor der ersten Messung.",
     );
   }
@@ -149,11 +169,16 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
   const laterMean = laterAfter.reduce((sum, point) => sum + point.smoothed, 0) / laterAfter.length;
 
   if (laterMean > limit) {
-    return pending("Die Geschwindigkeit sinkt nach dem höchsten Wert noch nicht deutlich.");
+    return pending(
+      "no-drop",
+      "Die Geschwindigkeit sinkt nach dem höchsten Wert noch nicht deutlich.",
+    );
   }
 
   return {
     status: "confirmed",
+    reason: "confirmed",
+    highestAge: peak.age,
     age: peak.age,
     velocity: peak.smoothed,
     note: "Gipfel der Wachstumsgeschwindigkeit beobachtet.",
