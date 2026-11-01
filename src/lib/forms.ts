@@ -64,6 +64,7 @@ export type GrowthProfileFormValues = {
   motherHeight: number | null;
   fatherHeight: number | null;
   maturityOverride: "early" | "average" | "late" | null;
+  maturityDelay: number | null;
 };
 
 function parseMaturityOverride(
@@ -74,6 +75,16 @@ function parseMaturityOverride(
   }
 
   return null;
+}
+
+function parseMaturityDelay(value: FormDataEntryValue | null): number | null {
+  const delay = parseNullableNumber(value);
+
+  if (delay !== null && (delay < -4 || delay > 6)) {
+    throw new Error("Die Entwicklungsverzögerung muss zwischen -4 und 6 Jahren liegen.");
+  }
+
+  return delay;
 }
 
 export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormValues {
@@ -89,6 +100,7 @@ export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormVal
     motherHeight: parseNullableNumber(formData.get("mother_height_cm")),
     fatherHeight: parseNullableNumber(formData.get("father_height_cm")),
     maturityOverride: parseMaturityOverride(formData.get("maturity_override")),
+    maturityDelay: parseMaturityDelay(formData.get("maturity_delay_years")),
   };
 }
 

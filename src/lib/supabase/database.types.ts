@@ -94,6 +94,7 @@ export type Database = {
           mother_height_cm: number | null;
           father_height_cm: number | null;
           maturity_override: Database["public"]["Enums"]["growth_maturity"] | null;
+          maturity_delay_years: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -104,6 +105,7 @@ export type Database = {
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
           maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
+          maturity_delay_years?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -114,6 +116,7 @@ export type Database = {
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
           maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
+          maturity_delay_years?: number | null;
           created_at?: string;
           updated_at?: string;
         };

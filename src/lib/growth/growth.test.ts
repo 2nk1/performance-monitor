@@ -36,6 +36,7 @@ const boyProfile: GrowthProfile = {
   mother_height_cm: 165,
   father_height_cm: 180,
   maturity_override: null,
+  maturity_delay_years: null,
   created_at: "",
   updated_at: "",
 };
@@ -428,5 +429,81 @@ describe("childhood deceleration is not mistaken for a spurt", () => {
     const analysis = buildGrowthAnalysis(spurtProfile(), spurtMeasurements(12.0, 12, 16));
 
     expect(analysis.peak.reason).not.toBe("no-spurt");
+  });
+});
+
+describe("Khamis-Roche with developmental age", () => {
+  const girl: GrowthProfile = {
+    ...boyProfile,
+    sex: "female",
+    birth_date: "2012-01-01",
+    mother_height_cm: 176,
+    father_height_cm: 189,
+  };
+  const measurements = [measurement({ measured_at: "2026-01-10", height_cm: 163, weight_kg: 50 })];
+
+  it("adds no extra prediction without a delay, or with a delay of zero", () => {
+    expect(buildGrowthAnalysis(girl, measurements).predictions).toHaveLength(2);
+    expect(
+      buildGrowthAnalysis({ ...girl, maturity_delay_years: 0 }, measurements).predictions,
+    ).toHaveLength(2);
+  });
+
+  it("computes the target at age minus delay and places it after Khamis-Roche", () => {
+    const analysis = buildGrowthAnalysis({ ...girl, maturity_delay_years: 3 }, measurements);
+    const age = analysis.points[0].age;
+    const adjusted = analysis.predictions.find((p) => p.id === "khamis-roche-adjusted");
+
+    expect(analysis.predictions.map((p) => p.id)).toEqual([
+      "khamis-roche",
+      "khamis-roche-adjusted",
+      "mid-parent",
+    ]);
+    expect(adjusted?.value).toBeCloseTo(
+      predictKhamisRoche({
+        sex: "female",
+        age: age - 3,
+        heightCm: 163,
+        weightKg: 50,
+        motherHeightCm: 176,
+        fatherHeightCm: 189,
+      }) ?? 0,
+      6,
+    );
+    expect(adjusted?.range).toBeNull();
+  });
+
+  it("gives a higher target for a late maturing girl and a lower one for an early maturing girl", () => {
+    const base = buildGrowthAnalysis(girl, measurements).predictions[0].value ?? 0;
+    const late = buildGrowthAnalysis({ ...girl, maturity_delay_years: 3 }, measurements)
+      .predictions[1].value;
+    const early = buildGrowthAnalysis({ ...girl, maturity_delay_years: -2 }, measurements)
+      .predictions[1].value;
+
+    expect(late).toBeGreaterThan(base + 5);
+    expect(early).toBeLessThan(base);
+  });
+
+  it("reports why it cannot be computed", () => {
+    // Alter 14 und vier Jahre früher dran ergibt Entwicklungsalter 18: außerhalb von 4 bis 17,5.
+    const outOfRange = buildGrowthAnalysis({ ...girl, maturity_delay_years: -4 }, measurements);
+    const noWeight = buildGrowthAnalysis({ ...girl, maturity_delay_years: 3 }, [
+      measurement({ measured_at: "2026-01-10", height_cm: 163, weight_kg: null }),
+    ]);
+
+    expect(outOfRange.predictions[1].value).toBeNull();
+    expect(outOfRange.predictions[1].missing).toEqual([
+      "Entwicklungsalter zwischen 4 und 17,5 Jahren",
+    ]);
+    expect(noWeight.predictions[1].missing).toEqual(["Messung mit Gewicht"]);
+  });
+
+  it("uses the adjusted target for the percentage of the target reached", () => {
+    const plain = buildGrowthAnalysis(girl, measurements);
+    const adjusted = buildGrowthAnalysis({ ...girl, maturity_delay_years: 3 }, measurements);
+    const target = adjusted.predictions.find((p) => p.id === "khamis-roche-adjusted")?.value ?? 1;
+
+    expect(adjusted.percentOfTarget).toBeCloseTo((163 / target) * 100, 6);
+    expect(adjusted.percentOfTarget).toBeLessThan(plain.percentOfTarget ?? 0);
   });
 });
