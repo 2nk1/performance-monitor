@@ -213,7 +213,7 @@ export function AthleteGrowthPage() {
               className="rounded-xl border border-card-border bg-card p-5"
               title="Aktuelle Größe in % der Khamis-Roche-Zielgröße"
             >
-              <p className="text-sm text-foreground/60">Reifestatus</p>
+              <p className="text-sm text-foreground/60">Erreichte Zielgröße</p>
               {analysis.percentOfTarget !== null ? (
                 <p className="mt-2 text-3xl font-semibold">
                   {formatNumber(analysis.percentOfTarget)} %
