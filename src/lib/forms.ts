@@ -97,6 +97,7 @@ export type GrowthMeasurementFormValues = {
   height: number;
   weight: number | null;
   sittingHeight: number | null;
+  armSpan: number | null;
   notes: string | null;
 };
 
@@ -118,6 +119,7 @@ export function parseGrowthMeasurementForm(formData: FormData): GrowthMeasuremen
     height,
     weight: parseNullableNumber(formData.get("weight_kg")),
     sittingHeight,
+    armSpan: parseNullableNumber(formData.get("arm_span_cm")),
     notes: parseOptionalString(formData.get("notes")),
   };
 }

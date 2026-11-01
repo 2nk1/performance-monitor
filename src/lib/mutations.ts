@@ -132,6 +132,7 @@ export async function createGrowthMeasurement(
     height_cm: input.height,
     weight_kg: input.weight,
     sitting_height_cm: input.sittingHeight,
+    arm_span_cm: input.armSpan,
     notes: input.notes,
   });
 
@@ -152,6 +153,7 @@ export async function updateGrowthMeasurement(
       height_cm: input.height,
       weight_kg: input.weight,
       sitting_height_cm: input.sittingHeight,
+      arm_span_cm: input.armSpan,
       notes: input.notes,
     })
     .eq("id", measurementId)
