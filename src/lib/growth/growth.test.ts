@@ -404,3 +404,36 @@ describe("no classification from the Moore estimate alone", () => {
     expect(analysis.phvEstimate).toBeNull();
   });
 });
+
+describe("childhood deceleration is not mistaken for a spurt", () => {
+  /** Hohe Rate im Grundschulalter, die bis etwa 9,5 Jahre abklingt, danach flach. */
+  function deceleratingMeasurements(fromAge: number, toAge: number, step: number) {
+    const result: GrowthMeasurement[] = [];
+    let height = 118;
+
+    for (let age = fromAge; age <= toAge + 1e-9; age += step) {
+      const date = new Date(Date.UTC(2010, 0, 1) + age * 365.25 * 86400000);
+      result.push(measurement({ measured_at: date.toISOString().slice(0, 10), height_cm: height }));
+      height += (5 + 6 * Math.exp(-(age + step / 2 - 7) / 1.2)) * step;
+    }
+
+    return result;
+  }
+
+  it("still presumes late for a girl whose highest rate is the end of childhood deceleration", () => {
+    const analysis = buildGrowthAnalysis(
+      spurtProfile({ sex: "female" }),
+      deceleratingMeasurements(6.5, 14, 0.25),
+    );
+
+    expect(analysis.peak.status).toBe("pending");
+    expect(analysis.peak.reason).toBe("no-spurt");
+    expect(analysis.timing).toMatchObject({ timing: "late", source: "presumed" });
+  });
+
+  it("keeps 'no rise observed' when the data only starts late (spurt may be earlier)", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile(), spurtMeasurements(12.0, 12, 16));
+
+    expect(analysis.peak.reason).not.toBe("no-spurt");
+  });
+});
