@@ -10,12 +10,7 @@ import {
   queryKeys,
 } from "@/lib/data";
 import { formatTestDate } from "@/lib/format";
-import {
-  ageInYears,
-  buildGrowthAnalysis,
-  maturityStageLabels,
-  type GrowthAnalysis,
-} from "@/lib/growth/analysis";
+import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
 import { predictionColors } from "@/lib/growth/colors";
 import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
 import type { GrowthSex } from "@/lib/types";
@@ -220,14 +215,9 @@ export function AthleteGrowthPage() {
             >
               <p className="text-sm text-foreground/60">Reifestatus</p>
               {analysis.percentOfTarget !== null ? (
-                <>
-                  <p className="mt-2 text-3xl font-semibold">
-                    {formatNumber(analysis.percentOfTarget)} %
-                  </p>
-                  <p className="mt-1 text-sm text-foreground/60">
-                    {analysis.maturity?.stage ? maturityStageLabels[analysis.maturity.stage] : ""}
-                  </p>
-                </>
+                <p className="mt-2 text-3xl font-semibold">
+                  {formatNumber(analysis.percentOfTarget)} %
+                </p>
               ) : (
                 <p className="mt-2 text-sm text-foreground/60">Braucht Khamis-Roche</p>
               )}
