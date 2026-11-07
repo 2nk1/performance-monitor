@@ -2,17 +2,20 @@ import { Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { GrowthChart } from "@/components/growth-chart";
+import { GrowthJumpChart } from "@/components/growth-jump-chart";
 import { GrowthVelocityChart } from "@/components/growth-velocity-chart";
 import {
   fetchGrowthMeasurementsByParticipant,
   fetchGrowthProfile,
   fetchParticipantById,
+  fetchPerformanceTestsByParticipant,
   queryKeys,
 } from "@/lib/data";
 import { formatTestDate } from "@/lib/format";
 import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
 import { formatPercentile, heightPercentile } from "@/lib/growth/percentiles";
 import { predictionColors } from "@/lib/growth/colors";
+import { buildJumpSeries } from "@/lib/growth/jump";
 import { armSpanRatio } from "@/lib/growth/proportions";
 import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
 import type { GrowthSex } from "@/lib/types";
@@ -85,12 +88,26 @@ export function AthleteGrowthPage() {
     enabled: !!id,
   });
 
+  const testsQuery = useQuery({
+    queryKey: queryKeys.performanceTestsByParticipant(id ?? ""),
+    queryFn: () => fetchPerformanceTestsByParticipant(id ?? ""),
+    enabled: !!id,
+  });
+
   const analysis = useMemo(
     () =>
       profileQuery.data
         ? buildGrowthAnalysis(profileQuery.data, measurementsQuery.data ?? [])
         : null,
     [profileQuery.data, measurementsQuery.data],
+  );
+
+  const jumpPoints = useMemo(
+    () =>
+      profileQuery.data && testsQuery.data
+        ? buildJumpSeries(testsQuery.data, profileQuery.data.birth_date)
+        : [],
+    [profileQuery.data, testsQuery.data],
   );
 
   if (participantQuery.isPending || profileQuery.isPending || measurementsQuery.isPending) {
@@ -330,6 +347,24 @@ export function AthleteGrowthPage() {
               KiGGS-Referenz, glättet den Schub.
             </p>
           </section>
+
+          {jumpPoints.length > 0 ? (
+            <section className="mb-10">
+              <h2 className="mb-4 text-lg font-semibold">Sprunghöhe und Wachstumsschub</h2>
+              <GrowthJumpChart
+                points={jumpPoints}
+                peakAge={analysis.peak.age}
+                estimatedPeakAge={
+                  // Moore liegt bei Spätentwicklern systematisch zu früh, dann lieber keine Markierung.
+                  analysis.timing?.timing === "late" ? null : (analysis.phvEstimate?.age ?? null)
+                }
+              />
+              <p className="mt-3 text-xs text-foreground/50">
+                Sprunghöhe aus den Leistungstests (Sprungreichhöhe minus Reichhöhe). Rund um den
+                Wachstumsgipfel stagniert die Sprungleistung oft, danach legt sie zu.
+              </p>
+            </section>
+          ) : null}
 
           <section>
             <h2 className="mb-4 text-lg font-semibold">Messungen</h2>
