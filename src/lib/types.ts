@@ -22,3 +22,12 @@ export type DevelopmentMetric = Extract<
 export type ComparisonTest = Omit<PerformanceTest, "participant_id" | "notes" | "created_at"> & {
   participant: Pick<Participant, "id" | "name" | "birth_year" | "participant_type" | "active">;
 };
+
+/** Person mit Wachstumsprofil und Größenmessungen für die Kurven-Überlagerung. */
+export type GrowthComparisonAthlete = Pick<
+  Participant,
+  "id" | "name" | "birth_year" | "participant_type"
+> &
+  Pick<GrowthProfile, "sex" | "birth_date"> & {
+    measurements: Pick<GrowthMeasurement, "measured_at" | "height_cm">[];
+  };

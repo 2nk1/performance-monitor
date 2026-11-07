@@ -47,6 +47,7 @@ export function GrowthMeasurementFormPage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.growthMeasurementsByParticipant(id ?? ""),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.growthComparison });
       if (measurementId) {
         await queryClient.invalidateQueries({
           queryKey: queryKeys.growthMeasurement(id ?? "", measurementId),

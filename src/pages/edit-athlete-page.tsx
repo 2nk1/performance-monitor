@@ -39,6 +39,7 @@ export function EditAthletePage() {
       await queryClient.invalidateQueries({ queryKey: queryKeys.participants });
       await queryClient.invalidateQueries({ queryKey: queryKeys.participant(id ?? "") });
       await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.growthComparison });
       if (id) {
         navigate(`/athletes/${id}`);
       }
