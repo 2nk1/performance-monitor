@@ -34,6 +34,7 @@ export function EditGrowthProfilePage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.growthProfile(id ?? "") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.growthComparison });
       if (id) {
         navigate(`/athletes/${id}/growth`);
       }

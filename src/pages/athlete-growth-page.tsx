@@ -147,7 +147,15 @@ export function AthleteGrowthPage() {
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {profile ? (
+              <Link
+                to={`/compare/growth?ids=${participant.id}`}
+                className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium hover:bg-sage/20"
+              >
+                Mit anderen vergleichen
+              </Link>
+            ) : null}
             <Link
               to={`/athletes/${participant.id}/growth/profile`}
               className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium hover:bg-sage/20"

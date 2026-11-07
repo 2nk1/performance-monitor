@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
   ComparisonTest,
+  GrowthComparisonAthlete,
   GrowthMeasurement,
   GrowthProfile,
   Participant,
@@ -16,6 +17,7 @@ export const queryKeys = {
   performanceTestsByParticipant: (id: string) => ["performance-tests", "participant", id] as const,
   performanceTest: (id: string, testId: string) => ["performance-tests", id, testId] as const,
   comparison: ["comparison"] as const,
+  growthComparison: ["growth-comparison"] as const,
   growthProfile: (id: string) => ["growth-profile", id] as const,
   growthMeasurementsByParticipant: (id: string) =>
     ["growth-measurements", "participant", id] as const,
@@ -252,4 +254,70 @@ export async function fetchGrowthMeasurement(
   }
 
   return data;
+}
+
+/**
+ * Alle aktiven Personen mit Wachstumsprofil samt ihrer Größenmessungen, für
+ * die Wachstumskurven-Überlagerung unter `/compare/growth`. Zwei Abfragen
+ * statt eines Embeds, aus demselben Grund wie bei `fetchComparisonTests`
+ * (keine Relationship-Metadaten in `database.types.ts`) – und weil die
+ * Messungen ohnehin nach Person gruppiert werden müssen.
+ */
+export async function fetchGrowthComparison(): Promise<GrowthComparisonAthlete[]> {
+  type ProfileRow = Pick<GrowthProfile, "participant_id" | "sex" | "birth_date"> & {
+    participants: Pick<Participant, "id" | "name" | "birth_year" | "participant_type" | "active">;
+  };
+
+  const [profilesResult, measurementsResult] = await Promise.all([
+    supabase
+      .from("growth_profiles")
+      .select<string, ProfileRow>(
+        `
+        participant_id,
+        sex,
+        birth_date,
+        participants!inner (
+          id,
+          name,
+          birth_year,
+          participant_type,
+          active
+        )
+      `,
+      )
+      .eq("participants.active", true),
+    supabase
+      .from("growth_measurements")
+      .select("participant_id, measured_at, height_cm")
+      .order("measured_at", { ascending: true }),
+  ]);
+
+  if (profilesResult.error || measurementsResult.error) {
+    throw new Error(
+      `Wachstumsdaten konnten nicht geladen werden: ${
+        profilesResult.error?.message ?? measurementsResult.error?.message
+      }`,
+    );
+  }
+
+  const measurementsByParticipant = new Map<string, GrowthComparisonAthlete["measurements"]>();
+
+  for (const row of measurementsResult.data ?? []) {
+    const list = measurementsByParticipant.get(row.participant_id) ?? [];
+    list.push({ measured_at: row.measured_at, height_cm: row.height_cm });
+    measurementsByParticipant.set(row.participant_id, list);
+  }
+
+  return (profilesResult.data ?? [])
+    .filter((row) => row.participants)
+    .map((row) => ({
+      id: row.participant_id,
+      name: row.participants.name,
+      birth_year: row.participants.birth_year,
+      participant_type: row.participants.participant_type,
+      sex: row.sex,
+      birth_date: row.birth_date,
+      measurements: measurementsByParticipant.get(row.participant_id) ?? [],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "de"));
 }

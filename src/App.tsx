@@ -66,6 +66,7 @@ const router = createBrowserRouter(
             { path: "/compare", element: <ComparePage mode="comparison" /> },
             { path: "/compare/ranking", element: <ComparePage mode="ranking" /> },
             { path: "/compare/development", element: <ComparePage mode="development" /> },
+            { path: "/compare/growth", element: <ComparePage mode="growth" /> },
           ],
         },
       ],

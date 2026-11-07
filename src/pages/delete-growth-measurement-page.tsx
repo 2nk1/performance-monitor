@@ -35,6 +35,7 @@ export function DeleteGrowthMeasurementPage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.growthMeasurementsByParticipant(id ?? ""),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.growthComparison });
       if (id) {
         navigate(`/athletes/${id}/growth`);
       }
