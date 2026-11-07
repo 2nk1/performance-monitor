@@ -507,3 +507,34 @@ describe("Khamis-Roche with developmental age", () => {
     expect(adjusted.percentOfTarget).toBeLessThan(plain.percentOfTarget ?? 0);
   });
 });
+
+describe("a flat spurt that is already over", () => {
+  /**
+   * Mädchen nahe am KiGGS-Median: Der Schub ist flach (7,9 cm/Jahr roh, geglättet
+   * kaum über dem Ruhewachstum), danach fällt die Rate bis fast auf null.
+   */
+  function flatSpurtMeasurements() {
+    const ages = [5.7, 6.9, 7.6, 8.26, 9.64, 10.46, 11.34, 12.46, 13.34, 13.86, 15.5];
+    const rates = [5.0, 5.7, 5.0, 7.0, 5.5, 6.6, 8.2, 3.8, 2.5, 0.3];
+    let height = 110;
+
+    return ages.map((age, index) => {
+      if (index > 0) height += rates[index - 1] * (age - ages[index - 1]);
+      const date = new Date(Date.UTC(2010, 0, 1) + age * 365.25 * 86400000);
+      return measurement({
+        measured_at: date.toISOString().slice(0, 10),
+        height_cm: Math.round(height * 10) / 10,
+        weight_kg: null,
+      });
+    });
+  }
+
+  it("confirms the peak instead of presuming a late spurt when growth is nearly finished", () => {
+    const analysis = buildGrowthAnalysis(spurtProfile({ sex: "female" }), flatSpurtMeasurements());
+
+    expect(analysis.peak.status).toBe("confirmed");
+    expect(analysis.peak.age).toBeGreaterThan(10.9);
+    expect(analysis.peak.age).toBeLessThan(12.5);
+    expect(analysis.timing).toMatchObject({ timing: "average", source: "observed" });
+  });
+});

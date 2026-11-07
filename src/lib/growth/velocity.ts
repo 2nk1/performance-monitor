@@ -24,6 +24,21 @@ const DROP_FACTOR = 0.9;
 
 const MIN_CANDIDATE_INTERVALS = 4;
 
+/**
+ * Geglättete Werte, die so nah am Höchstwert liegen, bilden ein Plateau. Die
+ * Glättung macht aus einem kurzen Gipfel ein Plateau, darin zeigt der höchste
+ * Rohwert, wo der Gipfel lag.
+ */
+const PLATEAU_FACTOR = 0.97;
+
+/**
+ * Darunter wächst ein Kind vor dem Schub nicht (Ruhewachstum ca. 4–6 cm/Jahr,
+ * auch bei später Pubertät). Fällt die Rate nach dem höchsten Wert so tief,
+ * klingt das Wachstum aus: Der Schub liegt hinter dem Kind, auch wenn der
+ * Anstieg davor im Messrauschen nicht zu sehen war.
+ */
+const GROWTH_ENDING_VELOCITY = 3.5;
+
 type Sample = { age: number; height_cm: number; measured_at: string };
 
 export type VelocityPoint = {
@@ -123,15 +138,19 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
     };
   }
 
-  let peakIndex = 0;
+  const highest = Math.max(...candidates.map((point) => point.smoothed));
+  let peakIndex = -1;
   candidates.forEach((point, index) => {
-    if (point.smoothed > candidates[peakIndex].smoothed) {
+    if (
+      point.smoothed >= highest * PLATEAU_FACTOR &&
+      (peakIndex < 0 || point.velocity > candidates[peakIndex].velocity)
+    ) {
       peakIndex = index;
     }
   });
 
   const peak = candidates[peakIndex];
-  const limit = peak.smoothed * DROP_FACTOR;
+  const limit = highest * DROP_FACTOR;
   const before = candidates.slice(0, peakIndex);
   const after = candidates.slice(peakIndex + 1);
 
@@ -144,7 +163,7 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
     note,
   });
 
-  if (peak.smoothed < MIN_PEAK_VELOCITY) {
+  if (highest < MIN_PEAK_VELOCITY) {
     return pending("no-spurt", "Noch kein Schub: Rate unter 6,5 cm/Jahr.");
   }
 
@@ -152,11 +171,17 @@ export function detectPeak(series: VelocityPoint[]): PeakResult {
     return pending("rising", "Höchster Wert bei den letzten Messungen, noch nicht bestätigt.");
   }
 
-  if (!before.some((point) => point.smoothed <= limit)) {
+  const rose = before.some((point) => point.smoothed <= limit);
+  const growthEnding = after.some((point) => point.smoothed < GROWTH_ENDING_VELOCITY);
+
+  // Ein flacher Schub ist geglättet kaum höher als das Ruhewachstum davor. Liegt
+  // der höchste Wert nicht am Anfang und klingt das Wachstum danach aus, war es
+  // trotzdem der Schub.
+  if (!rose && !(growthEnding && peakIndex > 0)) {
     // Beginnt der Verlauf schon im Grundschulalter und es gibt vor dem höchsten
     // Wert keinen Anstieg, ist es nur das Abklingen der Kindheit: Der Schub
     // kann nicht davor gelegen haben, er hat noch nicht begonnen.
-    if (candidates[0].age <= PEAK_MIN_AGE + 1) {
+    if (!growthEnding && candidates[0].age <= PEAK_MIN_AGE + 1) {
       return pending("no-spurt", "Noch kein Schub erkennbar.");
     }
 
