@@ -538,3 +538,53 @@ describe("a flat spurt that is already over", () => {
     expect(analysis.timing).toMatchObject({ timing: "average", source: "observed" });
   });
 });
+
+describe("peak from standing reach when heights are missing", () => {
+  const profile = spurtProfile();
+  /** Reichhöhen-Tests aus der synthetischen Kurve: Reichhöhe = Größe / 0,76 (gerundet auf cm). */
+  const reachTests = (peakAge: number, fromAge: number, toAge: number) =>
+    spurtMeasurements(peakAge, fromAge, toAge).map((m) => ({
+      test_date: m.measured_at,
+      reach_height_cm: Math.round(m.height_cm / 0.76),
+    }));
+
+  it("uses reach tests and the ratio from a single height measurement", () => {
+    const tests = reachTests(13.8, 9, 17);
+    const single = spurtMeasurements(13.8, 9, 17)[8];
+    const analysis = buildGrowthAnalysis(profile, [single], tests);
+
+    expect(analysis.velocitySource).toMatchObject({ kind: "reach", scaleSource: "measured" });
+    if (analysis.velocitySource.kind === "reach") {
+      expect(analysis.velocitySource.scale).toBeCloseTo(0.76, 2);
+    }
+    expect(analysis.peak.status).toBe("confirmed");
+    expect(analysis.peak.age).toBeGreaterThan(13.3);
+    expect(analysis.peak.age).toBeLessThan(14.3);
+    expect(analysis.timing).toMatchObject({ timing: "average", source: "observed" });
+  });
+
+  it("falls back to the default ratio without any height", () => {
+    const analysis = buildGrowthAnalysis(profile, [], reachTests(13.8, 9, 17));
+
+    expect(analysis.velocitySource).toMatchObject({ kind: "reach", scaleSource: "default" });
+    expect(analysis.peak.status).toBe("confirmed");
+  });
+
+  it("keeps heights when they are sufficient", () => {
+    const analysis = buildGrowthAnalysis(
+      profile,
+      spurtMeasurements(13.8, 9, 17),
+      reachTests(11, 9, 17),
+    );
+
+    expect(analysis.velocitySource).toEqual({ kind: "height" });
+    expect(analysis.peak.age).toBeGreaterThan(13.3);
+  });
+
+  it("stays insufficient when the reach tests are too sparse as well", () => {
+    const analysis = buildGrowthAnalysis(profile, [], reachTests(13.8, 12, 13));
+
+    expect(analysis.velocitySource).toEqual({ kind: "height" });
+    expect(analysis.peak.status).toBe("insufficient");
+  });
+});

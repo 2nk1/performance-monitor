@@ -4,6 +4,8 @@ import {
   KHAMIS_ROCHE_MIN_AGE,
   predictKhamisRoche,
 } from "@/lib/growth/khamis-roche";
+import { ageInYears } from "@/lib/growth/age";
+import { buildReachSamples, type ReachTest } from "@/lib/growth/reach";
 import { PHV_TIMING_THRESHOLDS, classifyPhvTiming } from "@/lib/growth/timing";
 import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
 import {
@@ -14,15 +16,7 @@ import {
 } from "@/lib/growth/velocity";
 import type { GrowthMaturity, GrowthMeasurement, GrowthProfile, GrowthSex } from "@/lib/types";
 
-const DAYS_PER_YEAR = 365.25;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** Dezimales Alter in Jahren zwischen zwei ISO-Daten (YYYY-MM-DD). */
-export function ageInYears(birthDate: string, date: string): number {
-  const birth = Date.parse(`${birthDate}T00:00:00Z`);
-  const at = Date.parse(`${date}T00:00:00Z`);
-  return (at - birth) / MS_PER_DAY / DAYS_PER_YEAR;
-}
+export { ageInYears };
 
 /**
  * Genetische Zielgröße nach Tanner (Mid-Parental Height):
@@ -129,6 +123,12 @@ export type GrowthAnalysis = {
   velocity: VelocityPoint[];
   peak: PeakResult;
   timing: TimingAssessment | null;
+  /**
+   * Woraus Geschwindigkeit und Gipfel stammen. reach: zu wenige Größenmessungen,
+   * stattdessen aus der Reichhöhe der Leistungstests (auf Größen-cm umgerechnet).
+   */
+  velocitySource:
+    { kind: "height" } | { kind: "reach"; scale: number; scaleSource: "measured" | "default" };
   /** Moore-Schätzung für das Alter beim Wachstumsschub, nur als Zahl und ohne Einstufung. */
   phvEstimate: { age: number; equation: string } | null;
   /** Fortschreibung der Größenkurve (Trend, kein Prognosemodell). */
@@ -158,6 +158,7 @@ function isLateByAbsence(sex: GrowthSex, latestAge: number, peak: PeakResult): b
 export function buildGrowthAnalysis(
   profile: GrowthProfile,
   measurements: GrowthMeasurement[],
+  reachTests: ReachTest[] = [],
 ): GrowthAnalysis {
   const { sex, birth_date, mother_height_cm, father_height_cm } = profile;
   const hasParents = mother_height_cm !== null && father_height_cm !== null;
@@ -282,8 +283,25 @@ export function buildGrowthAnalysis(
       })
     : null;
 
-  const velocity = buildVelocitySeries(points);
-  const peak = detectPeak(velocity);
+  let velocity = buildVelocitySeries(points);
+  let peak = detectPeak(velocity);
+  let velocitySource: GrowthAnalysis["velocitySource"] = { kind: "height" };
+  let latestAge = latest?.age ?? null;
+
+  // Zu wenige Größenmessungen: Gipfel aus der Reichhöhe der Leistungstests.
+  if (peak.status === "insufficient" && reachTests.length > 0) {
+    const reach = buildReachSamples(reachTests, birth_date, points);
+    const reachVelocity = buildVelocitySeries(reach.samples);
+    const reachPeak = detectPeak(reachVelocity);
+
+    if (reachPeak.status !== "insufficient") {
+      velocity = reachVelocity;
+      peak = reachPeak;
+      velocitySource = { kind: "reach", scale: reach.scale, scaleSource: reach.scaleSource };
+      latestAge = Math.max(latestAge ?? 0, reach.samples.at(-1)?.age ?? 0);
+    }
+  }
+
   const growthVelocity = velocity.at(-1)?.velocity ?? null;
 
   let timing: TimingAssessment | null = null;
@@ -291,7 +309,7 @@ export function buildGrowthAnalysis(
     timing = { timing: profile.maturity_override, source: "manual", phvAge: peak.age };
   } else if (peak.status === "confirmed" && peak.age !== null) {
     timing = { timing: classifyPhvTiming(sex, peak.age), source: "observed", phvAge: peak.age };
-  } else if (latest && isLateByAbsence(sex, latest.age, peak)) {
+  } else if (latestAge !== null && isLateByAbsence(sex, latestAge, peak)) {
     timing = { timing: "late", source: "presumed", phvAge: null };
   }
 
@@ -310,6 +328,7 @@ export function buildGrowthAnalysis(
     velocity,
     peak,
     timing,
+    velocitySource,
     phvEstimate,
     projection: projectGrowth(points, sex),
   };
