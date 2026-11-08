@@ -97,9 +97,13 @@ export function AthleteGrowthPage() {
   const analysis = useMemo(
     () =>
       profileQuery.data
-        ? buildGrowthAnalysis(profileQuery.data, measurementsQuery.data ?? [])
+        ? buildGrowthAnalysis(
+            profileQuery.data,
+            measurementsQuery.data ?? [],
+            testsQuery.data ?? [],
+          )
         : null,
-    [profileQuery.data, measurementsQuery.data],
+    [profileQuery.data, measurementsQuery.data, testsQuery.data],
   );
 
   const jumpPoints = useMemo(
@@ -110,7 +114,12 @@ export function AthleteGrowthPage() {
     [profileQuery.data, testsQuery.data],
   );
 
-  if (participantQuery.isPending || profileQuery.isPending || measurementsQuery.isPending) {
+  if (
+    participantQuery.isPending ||
+    profileQuery.isPending ||
+    measurementsQuery.isPending ||
+    testsQuery.isPending
+  ) {
     return <p className="text-sm text-foreground/60">Lade Wachstumsdaten...</p>;
   }
 
@@ -335,7 +344,12 @@ export function AthleteGrowthPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="mb-4 text-lg font-semibold">Wachstumsgeschwindigkeit</h2>
+            <h2 className="mb-4 text-lg font-semibold">
+              Wachstumsgeschwindigkeit
+              {analysis.velocitySource.kind === "reach" ? (
+                <span className="ml-2 text-sm font-normal text-foreground/60">aus Reichhöhe</span>
+              ) : null}
+            </h2>
             <GrowthVelocityChart
               velocity={analysis.velocity}
               sex={profile.sex}
@@ -343,6 +357,9 @@ export function AthleteGrowthPage() {
             />
             <p className="mt-3 text-xs text-foreground/50">
               {analysis.peak.status === "confirmed" ? "" : `${analysis.peak.note} `}
+              {analysis.velocitySource.kind === "reach"
+                ? `Zu wenige Größenmessungen, Rate aus der Reichhöhe der Leistungstests × ${formatNumber(analysis.velocitySource.scale, 2)} (${analysis.velocitySource.scaleSource === "measured" ? "Größe/Reichhöhe gemessen" : "Erfahrungswert"}). `
+                : ""}
               Bänder: Gipfelalter früh, normal, spät (Kozieł & Malina 2018). Gepunktet: Median der
               KiGGS-Referenz, glättet den Schub.
             </p>
