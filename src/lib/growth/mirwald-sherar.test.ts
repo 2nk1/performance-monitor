@@ -186,3 +186,54 @@ describe("buildGrowthAnalysis with Mirwald/Sherar", () => {
     ]);
   });
 });
+
+describe("Mirwald/Sherar uses what is known about the spurt", () => {
+  const profile: GrowthProfile = {
+    participant_id: "p1",
+    sex: "male",
+    birth_date: "2010-01-01",
+    mother_height_cm: null,
+    father_height_cm: null,
+    maturity_override: null,
+    maturity_delay_years: null,
+    created_at: "",
+    updated_at: "",
+  };
+  const m = (date: string, height: number, extra: Partial<GrowthMeasurement> = {}) =>
+    ({
+      id: crypto.randomUUID(),
+      participant_id: "p1",
+      measured_at: date,
+      height_cm: height,
+      weight_kg: 45,
+      sitting_height_cm: 75,
+      arm_span_cm: null,
+      notes: null,
+      created_at: "",
+      ...extra,
+    }) as GrowthMeasurement;
+  const find = (p: GrowthProfile, ms: GrowthMeasurement[]) =>
+    buildGrowthAnalysis(p, ms).predictions.find((x) => x.id === "mirwald-sherar");
+
+  // Gleichmäßiges Ruhewachstum von 5 cm/Jahr, nie ein Schub
+  const flat = Array.from({ length: 12 }, (_, i) =>
+    m(`${2018 + Math.floor(i / 2)}-${i % 2 ? "09" : "03"}-01`, 120 + i * 2.5),
+  );
+
+  it("never claims a past spurt while the measurements show none", () => {
+    const prediction = find(profile, flat);
+
+    expect(prediction?.value).not.toBeNull();
+    expect(prediction?.description).toContain("geschätzt");
+    expect(prediction?.description).not.toMatch(/\+\d/);
+  });
+
+  it("uses the late curve with the spurt still ahead for a manually set late type", () => {
+    const late = find({ ...profile, maturity_override: "late" }, flat);
+
+    expect(late?.description).toContain("noch nicht beobachtet");
+    expect(late?.description).toContain("Spätentwickler");
+    // Schub liegt voraus: mindestens das Restwachstum am Schubgipfel (ca. 13 cm)
+    expect((late?.value ?? 0) - (flat.at(-1)?.height_cm ?? 0)).toBeGreaterThanOrEqual(13);
+  });
+});
