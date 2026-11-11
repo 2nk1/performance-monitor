@@ -60,6 +60,12 @@ export function sherarMaturityGroup(sex: GrowthSex, ageAtPhv: number): GrowthMat
   return "average";
 }
 
+/** Mittleres Schubalter je Gruppe laut Sherar et al. (2005), Tabelle I. */
+export const SHERAR_GROUP_PHV_AGE: Record<GrowthSex, Record<GrowthMaturity, number>> = {
+  male: { early: 12.33, average: 13.85, late: 15.26 },
+  female: { early: 10.3, average: 11.58, late: 12.92 },
+};
+
 export const SHERAR_MIN_OFFSET = -4;
 export const SHERAR_MAX_OFFSET = 4;
 const SHERAR_STEP = 0.2;
@@ -142,10 +148,36 @@ export type MirwaldSherarResult = {
   offsetYears: number;
   ageAtPhv: number;
   group: GrowthMaturity;
+  /**
+   * observed: Schubalter aus den Messungen; group: Schub liegt noch vor dem Kind, Alter aus dem
+   * Gruppenmittel; estimate: Abstand aus der Mirwald-Gleichung.
+   */
+  source: "observed" | "group" | "estimate";
   /** null, wenn der Abstand zum Wachstumsschub außerhalb von ±4 Jahren liegt. */
   leftToGrowCm: number | null;
   predictedHeightCm: number | null;
 };
+
+/** Prognose, wenn Abstand und Gruppe bereits feststehen (aus Messungen oder Einstufung). */
+export function predictFromOffset(input: {
+  sex: GrowthSex;
+  age: number;
+  heightCm: number;
+  offsetYears: number;
+  group: GrowthMaturity;
+  source: MirwaldSherarResult["source"];
+}): MirwaldSherarResult {
+  const leftToGrowCm = sherarLeftToGrow(input.sex, input.group, input.offsetYears);
+
+  return {
+    offsetYears: input.offsetYears,
+    ageAtPhv: input.age - input.offsetYears,
+    group: input.group,
+    source: input.source,
+    leftToGrowCm,
+    predictedHeightCm: leftToGrowCm === null ? null : input.heightCm + leftToGrowCm,
+  };
+}
 
 export function predictMirwaldSherar(input: {
   sex: GrowthSex;
@@ -157,15 +189,14 @@ export function predictMirwaldSherar(input: {
   groupOverride?: GrowthMaturity | null;
 }): MirwaldSherarResult {
   const offsetYears = mirwaldMaturityOffset(input);
-  const ageAtPhv = input.age - offsetYears;
-  const group = input.groupOverride ?? sherarMaturityGroup(input.sex, ageAtPhv);
-  const leftToGrowCm = sherarLeftToGrow(input.sex, group, offsetYears);
+  const group = input.groupOverride ?? sherarMaturityGroup(input.sex, input.age - offsetYears);
 
-  return {
+  return predictFromOffset({
+    sex: input.sex,
+    age: input.age,
+    heightCm: input.heightCm,
     offsetYears,
-    ageAtPhv,
     group,
-    leftToGrowCm,
-    predictedHeightCm: leftToGrowCm === null ? null : input.heightCm + leftToGrowCm,
-  };
+    source: "estimate",
+  });
 }
