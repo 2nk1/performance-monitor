@@ -443,10 +443,10 @@ describe("Khamis-Roche with developmental age", () => {
   const measurements = [measurement({ measured_at: "2026-01-10", height_cm: 163, weight_kg: 50 })];
 
   it("adds no extra prediction without a delay, or with a delay of zero", () => {
-    expect(buildGrowthAnalysis(girl, measurements).predictions).toHaveLength(2);
+    expect(buildGrowthAnalysis(girl, measurements).predictions).toHaveLength(3);
     expect(
       buildGrowthAnalysis({ ...girl, maturity_delay_years: 0 }, measurements).predictions,
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
   it("computes the target at age minus delay and places it after Khamis-Roche", () => {
@@ -458,6 +458,7 @@ describe("Khamis-Roche with developmental age", () => {
       "khamis-roche",
       "khamis-roche-adjusted",
       "mid-parent",
+      "mirwald-sherar",
     ]);
     expect(adjusted?.value).toBeCloseTo(
       predictKhamisRoche({

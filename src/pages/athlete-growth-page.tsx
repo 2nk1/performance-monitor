@@ -268,7 +268,11 @@ export function AthleteGrowthPage() {
                       const footer =
                         prediction.basisDate &&
                         prediction.basisDate !== analysis.latest?.measured_at
-                          ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit Gewicht)`
+                          ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit ${
+                              prediction.id === "mirwald-sherar"
+                                ? "Sitzhöhe und Gewicht"
+                                : "Gewicht"
+                            })`
                           : prediction.description;
 
                       return footer ? (
@@ -336,8 +340,9 @@ export function AthleteGrowthPage() {
               sex={profile.sex}
             />
             <p className="mt-3 text-xs text-foreground/50">
-              Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm).
-              Khamis-Roche gilt für 4 bis 17,5 Jahre. Fortschreibung: aktuelle Rate, die linear bis{" "}
+              Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm,
+              Mirwald/Sherar 95 %). Khamis-Roche gilt für 4 bis 17,5 Jahre, Mirwald/Sherar bis 4
+              Jahre vor und nach dem Wachstumsschub. Fortschreibung: aktuelle Rate, die linear bis{" "}
               {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
               Wachstumsschub.
             </p>
