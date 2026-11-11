@@ -4,9 +4,10 @@ import {
   KHAMIS_ROCHE_MIN_AGE,
   predictKhamisRoche,
 } from "@/lib/growth/khamis-roche";
+import { SHERAR_ERROR_95_CM, predictMirwaldSherar } from "@/lib/growth/mirwald-sherar";
 import { ageInYears } from "@/lib/growth/age";
 import { buildReachSamples, type ReachTest } from "@/lib/growth/reach";
-import { PHV_TIMING_THRESHOLDS, classifyPhvTiming } from "@/lib/growth/timing";
+import { PHV_TIMING_THRESHOLDS, classifyPhvTiming, timingLabels } from "@/lib/growth/timing";
 import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
 import {
   buildVelocitySeries,
@@ -80,7 +81,8 @@ export type GrowthPoint = GrowthMeasurement & {
   percentPredicted: number | null;
 };
 
-export type PredictionModelId = "khamis-roche" | "khamis-roche-adjusted" | "mid-parent";
+export type PredictionModelId =
+  "khamis-roche" | "khamis-roche-adjusted" | "mid-parent" | "mirwald-sherar";
 
 export type Prediction = {
   id: PredictionModelId;
@@ -89,7 +91,7 @@ export type Prediction = {
   value: number | null;
   /** Unsicherheitsbereich ± in cm. */
   range: number | null;
-  /** Datum der Messung, auf der die Prognose beruht (nur Khamis-Roche). */
+  /** Datum der Messung, auf der die Prognose beruht (Khamis-Roche, Mirwald/Sherar). */
   basisDate: string | null;
   /** Fehlende Eingaben, falls `value` null ist. */
   missing: string[];
@@ -268,6 +270,40 @@ export function buildGrowthAnalysis(
             : krMissing,
     });
   }
+
+  // Mirwald/Sherar braucht Sitzhöhe und Gewicht; es zählt die jüngste Messung mit beidem.
+  const msBasis =
+    [...points]
+      .reverse()
+      .find((point) => point.sitting_height_cm !== null && point.weight_kg !== null) ?? null;
+  const ms =
+    msBasis && msBasis.sitting_height_cm !== null && msBasis.weight_kg !== null
+      ? predictMirwaldSherar({
+          sex,
+          age: msBasis.age,
+          heightCm: msBasis.height_cm,
+          sittingHeightCm: msBasis.sitting_height_cm,
+          weightKg: msBasis.weight_kg,
+          groupOverride: profile.maturity_override,
+        })
+      : null;
+  const formatYears = (years: number) => years.toFixed(1).replace(".", ",").replace("-", "−");
+
+  predictions.push({
+    id: "mirwald-sherar",
+    label: "Mirwald/Sherar",
+    description: ms
+      ? `Schub ${ms.offsetYears > 0 ? "+" : ""}${formatYears(ms.offsetYears)} J., ${timingLabels[ms.group]}${profile.maturity_override ? " (manuell)" : ""}`
+      : null,
+    value: ms?.predictedHeightCm ?? null,
+    range: SHERAR_ERROR_95_CM[sex],
+    basisDate: msBasis?.measured_at ?? null,
+    missing: ms
+      ? ms.predictedHeightCm === null
+        ? ["Messung höchstens 4 Jahre vor oder nach dem Wachstumsschub"]
+        : []
+      : [points.length === 0 ? "Messung" : "Messung mit Sitzhöhe und Gewicht"],
+  });
 
   // Mit gesetzter Entwicklungsverzögerung zählt die Zielgröße mit Entwicklungsalter.
   const adjustedTarget = predictions.find((p) => p.id === "khamis-roche-adjusted")?.value ?? null;

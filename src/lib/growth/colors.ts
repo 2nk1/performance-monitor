@@ -7,6 +7,7 @@ export const predictionColors: Record<PredictionModelId, string> = {
   "khamis-roche": getSeriesColor(1),
   "khamis-roche-adjusted": getSeriesColor(3),
   "mid-parent": getSeriesColor(2),
+  "mirwald-sherar": getSeriesColor(4),
 };
 
 /**
