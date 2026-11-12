@@ -190,3 +190,116 @@ export function buildTypeTrajectories(input: {
     activeGroup: curves.some((curve) => curve.group === knownGroup) ? knownGroup : null,
   };
 }
+
+export type MirwaldCurve = {
+  /** Altersraster ab der letzten Messung. */
+  ages: number[];
+  heights: number[];
+  /** Mirwald/Sherar-Zielgröße, bei der die Kurve endet. */
+  target: number;
+  group: GrowthMaturity;
+  /**
+   * error: Fehlerbereich der Prognose (95 %), öffnet sich von 0 am Messpunkt bis
+   * zur vollen Breite am Ende; nur bei beobachtetem Schub.
+   * types: Spanne der Typen, die zu Messung und Zielgröße passen ("wenn Typ so,
+   * dann so"), ohne Versprechen einer Linie.
+   */
+  band: { kind: "error" | "types"; lo: number[]; hi: number[] } | null;
+};
+
+/** Linear interpolierter Wert, vor dem Anfang der erste, nach dem Ende der letzte. */
+function valueAt(ages: number[], values: number[], age: number): number {
+  const last = ages.length - 1;
+
+  if (age <= ages[0]) return values[0];
+  if (age >= ages[last]) return values[last];
+
+  const upper = ages.findIndex((candidate) => candidate >= age);
+  const t = (age - ages[upper - 1]) / (ages[upper] - ages[upper - 1]);
+
+  return values[upper - 1] + (values[upper] - values[upper - 1]) * t;
+}
+
+/**
+ * Verlaufskurve zur Mirwald/Sherar-Zielgröße: ab der letzten Messung
+ * Zielgröße − Restwachstum(Typ, Abstand zum Schub + Δt), so gestreckt, dass sie
+ * genau am Messpunkt startet. Die Sherar-Tabelle wird linear interpoliert.
+ *
+ * Das Band hängt an der Datengrundlage: Bei beobachtetem Schub gilt der
+ * Fehlerbereich der Methode, der am Messpunkt null ist und sich zur Zielgröße
+ * hin öffnet. Sonst gibt es keinen belegten Fehlerbereich, das Band zeigt dann
+ * die Spanne der zum Ergebnis passenden Typen.
+ */
+export function buildMirwaldCurve(input: {
+  sex: GrowthSex;
+  age: number;
+  heightCm: number;
+  targetCm: number;
+  group: GrowthMaturity;
+  /** Abstand der letzten Messung zum Schub (negativ = Schub kommt noch). */
+  offsetYears: number;
+  source: "observed" | "group" | "estimate";
+  errorCm: number;
+  maxOffsetYears: number | null;
+}): MirwaldCurve | null {
+  const { sex, age, heightCm, targetCm, group, offsetYears, source } = input;
+  const remaining = targetCm - heightCm;
+  const offset = Math.min(Math.max(offsetYears, SHERAR_MIN_OFFSET), SHERAR_MAX_OFFSET);
+  const leftNow = sherarLeftToGrow(sex, group, offset);
+
+  if (!(remaining > 0) || leftNow === null || leftNow <= 0) {
+    return null;
+  }
+
+  const fractionDone = (current: number) => {
+    const left = sherarLeftToGrow(sex, group, offset + (current - age));
+    return left === null ? 1 : 1 - Math.min(left, leftNow) / leftNow;
+  };
+  const ownEnd = age + SHERAR_MAX_OFFSET - offset;
+
+  const types =
+    source === "observed"
+      ? null
+      : buildTypeTrajectories({
+          sex,
+          age,
+          heightCm,
+          targetCm,
+          maxOffsetYears: input.maxOffsetYears,
+          knownGroup: source === "group" ? group : null,
+          knownOffsetYears: source === "group" ? offsetYears : null,
+        });
+
+  const endAge = Math.max(ownEnd, types?.ages.at(-1) ?? 0);
+  const ages: number[] = [];
+  for (let current = age; current < endAge - 1e-9; current += GRID_STEP_YEARS) {
+    ages.push(current);
+  }
+  ages.push(Math.max(endAge, age));
+
+  const heights = ages.map((current, index) =>
+    index === 0 ? heightCm : heightCm + remaining * fractionDone(current),
+  );
+
+  let band: MirwaldCurve["band"] = null;
+
+  if (source === "observed") {
+    const fan = ages.map((current) => input.errorCm * fractionDone(current));
+    band = {
+      kind: "error",
+      lo: heights.map((height, index) => height - fan[index]),
+      hi: heights.map((height, index) => height + fan[index]),
+    };
+  } else if (types && types.curves.length > 1) {
+    const others = types.curves.map((curve) =>
+      ages.map((current) => valueAt(types.ages, curve.heights, current)),
+    );
+    band = {
+      kind: "types",
+      lo: heights.map((height, index) => Math.min(height, ...others.map((row) => row[index]))),
+      hi: heights.map((height, index) => Math.max(height, ...others.map((row) => row[index]))),
+    };
+  }
+
+  return { ages, heights, target: targetCm, group, band };
+}

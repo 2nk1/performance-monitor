@@ -404,6 +404,7 @@ export function AthleteGrowthPage() {
               projection={analysis.projection}
               trajectories={analysis.trajectories}
               trajectoryNote={analysis.trajectoryNote}
+              mirwaldCurve={analysis.mirwaldCurve}
               primaryId={analysis.primaryPredictionId}
               sex={profile.sex}
               visible={visibleCurves}
@@ -417,9 +418,12 @@ export function AthleteGrowthPage() {
               Zielgröße der Hauptquelle. Sie zeigen, wie die Größe wahrscheinlich dorthin kommt,
               nicht die Unsicherheit der Zielgröße. Das Band spannt alle Typen auf, zu denen die
               Messung passt. Passt die Zielgröße nicht zur Tabelle des bekannten Typs, ist dessen
-              Kurve auf die Zielgröße gestreckt. Ohne Typ-Verläufe lässt sich ein Trend zuschalten:
-              aktuelle Rate, die linear bis {profile.sex === "male" ? "19" : "17"} Jahre ausläuft,
-              ohne Modell für den Wachstumsschub.
+              Kurve auf die Zielgröße gestreckt. Verlauf Mirwald/Sherar: dünne Linie zur eigenen
+              Zielgröße; das Band ist bei beobachtetem Schub der Fehlerbereich, sonst die Spanne der
+              möglichen Typen (wenn Typ so, dann so, ohne Versprechen einer Linie). Ohne
+              Typ-Verläufe lässt sich ein Trend zuschalten: aktuelle Rate, die linear bis{" "}
+              {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
+              Wachstumsschub.
             </p>
           </section>
 
