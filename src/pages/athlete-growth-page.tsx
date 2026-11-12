@@ -401,29 +401,18 @@ export function AthleteGrowthPage() {
             <GrowthChart
               points={analysis.points}
               predictions={analysis.predictions}
-              projection={analysis.projection}
-              trajectories={analysis.trajectories}
-              trajectoryNote={analysis.trajectoryNote}
+              modelTrajectories={analysis.modelTrajectories}
               mirwaldCurve={analysis.mirwaldCurve}
-              primaryId={analysis.primaryPredictionId}
+              curveNotes={analysis.curveNotes}
               sex={profile.sex}
               visible={visibleCurves}
-              onToggle={toggleCurve}
             />
             <p className="mt-3 text-xs text-foreground/50">
-              Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm,
-              Mirwald/Sherar 95 %, letzteres nur bei beobachtetem Schub). Khamis-Roche gilt für 4
-              bis 17,5 Jahre, Mirwald/Sherar bis 4 Jahre vor und nach dem Wachstumsschub.
-              Entwicklungsverlauf: Verläufe nach Sherar et al. (2005) durch die letzte Messung zur
-              Zielgröße der Hauptquelle. Sie zeigen, wie die Größe wahrscheinlich dorthin kommt,
-              nicht die Unsicherheit der Zielgröße. Das Band spannt alle Typen auf, zu denen die
-              Messung passt. Passt die Zielgröße nicht zur Tabelle des bekannten Typs, ist dessen
-              Kurve auf die Zielgröße gestreckt. Verlauf Mirwald/Sherar: dünne Linie zur eigenen
-              Zielgröße; das Band ist bei beobachtetem Schub der Fehlerbereich, sonst die Spanne der
-              möglichen Typen (wenn Typ so, dann so, ohne Versprechen einer Linie). Ohne
-              Typ-Verläufe lässt sich ein Trend zuschalten: aktuelle Rate, die linear bis{" "}
-              {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
-              Wachstumsschub.
+              Gestrichelt: Zielgröße der aktiven Kachel, schattiert ihr Fehlerbereich
+              (Mirwald/Sherar nur bei beobachtetem Schub). Dünne Linien: möglicher Verlauf dorthin
+              nach Sherar et al. (2005), ab der letzten Messung. Das Band darum zeigt, wie sich der
+              Verlauf je nach Entwicklungstyp unterscheidet, und nicht, wie sicher die Zielgröße
+              ist.
             </p>
           </section>
 

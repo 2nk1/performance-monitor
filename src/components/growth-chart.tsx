@@ -9,13 +9,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CurveToggle } from "@/components/curve-toggle";
-import type { GrowthPoint, Prediction, PredictionModelId } from "@/lib/growth/analysis";
+import type {
+  GrowthAnalysis,
+  GrowthPoint,
+  Prediction,
+  PredictionModelId,
+  TrajectoryModel,
+} from "@/lib/growth/analysis";
 import type { CurveKey } from "@/lib/growth/curve-visibility";
 import { referenceCurve } from "@/lib/growth/percentiles";
-import type { ProjectionPoint } from "@/lib/growth/projection";
 import { timingLabels } from "@/lib/growth/timing";
-import type { GrowthTrajectories, MirwaldCurve } from "@/lib/growth/trajectory";
+import type { MirwaldCurve } from "@/lib/growth/trajectory";
 import type { GrowthSex } from "@/lib/types";
 import { predictionColors } from "@/lib/growth/colors";
 import { getSeriesColor } from "@/lib/series-colors";
@@ -25,33 +29,35 @@ const HEIGHT_COLOR = getSeriesColor(0);
 type GrowthChartProps = {
   points: GrowthPoint[];
   predictions: Prediction[];
-  projection: ProjectionPoint[] | null;
-  trajectories: GrowthTrajectories | null;
-  /** Grund, warum es keine Typ-Verläufe gibt. */
-  trajectoryNote: string | null;
+  modelTrajectories: GrowthAnalysis["modelTrajectories"];
   /** Verlauf zur Mirwald/Sherar-Zielgröße mit Band. */
   mirwaldCurve: MirwaldCurve | null;
-  /** Modell, an dessen Zielgröße die Typ-Verläufe enden. */
-  primaryId: PredictionModelId | null;
+  /** Grund je Modell, warum es keinen Verlauf gibt. */
+  curveNotes: GrowthAnalysis["curveNotes"];
   sex: GrowthSex;
   visible: Set<CurveKey>;
-  onToggle: (key: CurveKey, on: boolean) => void;
 };
 
-const formatAge = (age: number) => `${age.toFixed(1).replace(".", ",")} J.`;
 const formatCm = (value: number) => `${value.toFixed(1).replace(".", ",")} cm`;
+
+/** Ein Verlauf zu einer Zielgröße: dünne Linien und ein Band, alles in der Farbe der Kachel. */
+type CurveSet = {
+  id: PredictionModelId;
+  label: string;
+  color: string;
+  ages: number[];
+  lines: { name: string; heights: number[]; dotted: boolean }[];
+  band: { kind: "error" | "types"; lo: number[]; hi: number[] } | null;
+};
 
 export function GrowthChart({
   points,
   predictions,
-  projection: trend,
-  trajectories,
-  trajectoryNote,
+  modelTrajectories,
   mirwaldCurve,
-  primaryId,
+  curveNotes,
   sex,
   visible,
-  onToggle,
 }: GrowthChartProps) {
   if (points.length === 0) {
     return (
@@ -68,27 +74,70 @@ export function GrowthChart({
       prediction.value !== null &&
       visible.has(prediction.id === "khamis-roche-adjusted" ? "khamis-roche" : prediction.id),
   );
+  const labelOf = (id: PredictionModelId) =>
+    predictions.find((prediction) => prediction.id === id)?.label ?? id;
 
-  // Die lineare Fortschreibung ist nur der Rückfall, wenn es keine Typ-Verläufe gibt.
-  const projection = !trajectories && visible.has("trend") ? trend : null;
-  const shownTrajectories = trajectories && visible.has("trajectories") ? trajectories : null;
-  // Ist Mirwald/Sherar die Hauptquelle, deckt sich seine Kurve mit dem Typ-Verlauf: nur einmal zeichnen.
-  const shownMirwald =
-    mirwaldCurve &&
-    visible.has("mirwald-sherar") &&
-    !(primaryId === "mirwald-sherar" && shownTrajectories)
-      ? mirwaldCurve
-      : null;
-  const mirwaldColor = predictionColors["mirwald-sherar"];
-  const trajectoryColor = predictionColors[primaryId ?? "khamis-roche"];
+  // Zu jeder aktiven Kachel gehört ihr Verlauf.
+  const curveSets: CurveSet[] = [];
+
+  for (const model of ["khamis-roche", "mid-parent"] as TrajectoryModel[]) {
+    const trajectories = modelTrajectories[model];
+
+    if (!visible.has(model) || !trajectories) continue;
+
+    const known = trajectories.curves.find((curve) => curve.group === trajectories.activeGroup);
+    const shown = known ? [known] : trajectories.curves;
+    const spread = trajectories.curves.length > 1;
+
+    curveSets.push({
+      id: model,
+      label: labelOf(model),
+      color: predictionColors[model],
+      ages: trajectories.ages,
+      lines: shown.map((curve) => ({
+        name: `Verlauf ${labelOf(model)}${known ? "" : ` (${timingLabels[curve.group]})`}`,
+        heights: curve.heights,
+        dotted: !known && curve.group !== "average",
+      })),
+      band: spread
+        ? {
+            kind: "types",
+            lo: trajectories.ages.map((_, index) =>
+              Math.min(...trajectories.curves.map((curve) => curve.heights[index])),
+            ),
+            hi: trajectories.ages.map((_, index) =>
+              Math.max(...trajectories.curves.map((curve) => curve.heights[index])),
+            ),
+          }
+        : null,
+    });
+  }
+
+  if (visible.has("mirwald-sherar") && mirwaldCurve) {
+    curveSets.push({
+      id: "mirwald-sherar",
+      label: labelOf("mirwald-sherar"),
+      color: predictionColors["mirwald-sherar"],
+      ages: mirwaldCurve.ages,
+      lines: [{ name: "Verlauf Mirwald/Sherar", heights: mirwaldCurve.heights, dotted: false }],
+      band: mirwaldCurve.band,
+    });
+  }
+
+  const mirwaldErrorBandEnd =
+    curveSets
+      .find((set) => set.id === "mirwald-sherar" && set.band?.kind === "error")
+      ?.ages.at(-1) ?? null;
+
+  const notes = (["khamis-roche", "mid-parent", "mirwald-sherar"] as const).flatMap((id) =>
+    visible.has(id) && curveNotes[id] ? [`${labelOf(id)}: ${curveNotes[id]}`] : [],
+  );
 
   const xMin = Math.floor(points[0].age) - 0.5;
   const xMax = Math.max(
     18.5,
     Math.ceil(latest.age) + 1,
-    Math.ceil(projection?.at(-1)?.age ?? 0) + 0.5,
-    Math.ceil(shownTrajectories?.ages.at(-1) ?? 0) + 0.5,
-    Math.ceil(shownMirwald?.ages.at(-1) ?? 0) + 0.5,
+    ...curveSets.map((set) => Math.ceil(set.ages.at(-1) ?? 0) + 0.5),
   );
 
   const reference = referenceCurve(sex, xMin, xMax);
@@ -97,10 +146,11 @@ export function GrowthChart({
     ...reference.flatMap((point) => [point.p3, point.p97]),
     ...points.map((point) => point.height_cm),
     ...points.flatMap((point) => (point.khamisRoche !== null ? [point.khamisRoche] : [])),
-    ...(projection?.map((point) => point.height) ?? []),
-    ...(shownTrajectories ? [shownTrajectories.target] : []),
-    ...(shownMirwald ? [...shownMirwald.heights, ...(shownMirwald.band?.lo ?? [])] : []),
-    ...(shownMirwald?.band?.hi ?? []),
+    ...curveSets.flatMap((set) => [
+      ...set.lines.flatMap((line) => line.heights),
+      ...(set.band?.lo ?? []),
+      ...(set.band?.hi ?? []),
+    ]),
     ...available.flatMap((prediction) => [
       prediction.value - (prediction.range ?? 0),
       prediction.value + (prediction.range ?? 0),
@@ -114,64 +164,33 @@ export function GrowthChart({
     age: number;
     height?: number;
     khamisRoche?: number | null;
-    projected?: number;
     /** KiGGS-Referenz: Bereich P3 bis P97 und Median. */
     band?: [number, number];
     median?: number;
-    /** Spanne aller zur Messung passenden Entwicklungstypen. */
-    typeBand?: [number, number];
-    /** Verlauf des bekannten Typs. */
-    typeLine?: number;
-    /** Mirwald/Sherar-Verlauf und sein Band. */
-    mirwald?: number;
-    mirwaldBand?: [number, number];
-    typeEarly?: number;
-    typeAverage?: number;
-    typeLate?: number;
+    /** Verläufe und ihre Bänder je Kachel, Schlüssel `c<Nr>l<Nr>` bzw. `c<Nr>b`. */
+    [curveKey: string]: number | [number, number] | null | undefined;
   };
 
-  const data: Row[] = points.map((point, index) => ({
+  const data: Row[] = points.map((point) => ({
     age: point.age,
     height: point.height_cm,
     khamisRoche: point.khamisRoche,
-    // Die Fortschreibung beginnt an der letzten Messung, damit die Linie anschließt.
-    ...(projection && index === points.length - 1 ? { projected: point.height_cm } : {}),
   }));
 
-  projection?.slice(1).forEach((point) => data.push({ age: point.age, projected: point.height }));
+  curveSets.forEach((set, setIndex) => {
+    set.ages.forEach((age, index) => {
+      const row: Row = { age };
 
-  const lineKey = { early: "typeEarly", average: "typeAverage", late: "typeLate" } as const;
-  const activeCurve = shownTrajectories?.curves.find(
-    (curve) => curve.group === shownTrajectories.activeGroup,
-  );
-
-  shownTrajectories?.ages.forEach((age, index) => {
-    const heights = shownTrajectories.curves.map((curve) => curve.heights[index]);
-    const row: Row = { age };
-
-    if (shownTrajectories.curves.length > 1) {
-      row.typeBand = [Math.min(...heights), Math.max(...heights)];
-    }
-
-    if (activeCurve) {
-      row.typeLine = activeCurve.heights[index];
-    } else {
-      shownTrajectories.curves.forEach((curve) => {
-        row[lineKey[curve.group]] = curve.heights[index];
+      set.lines.forEach((line, lineIndex) => {
+        row[`c${setIndex}l${lineIndex}`] = line.heights[index];
       });
-    }
 
-    data.push(row);
-  });
+      if (set.band) {
+        row[`c${setIndex}b`] = [set.band.lo[index], set.band.hi[index]];
+      }
 
-  shownMirwald?.ages.forEach((age, index) => {
-    const row: Row = { age, mirwald: shownMirwald.heights[index] };
-
-    if (shownMirwald.band) {
-      row.mirwaldBand = [shownMirwald.band.lo[index], shownMirwald.band.hi[index]];
-    }
-
-    data.push(row);
+      data.push(row);
+    });
   });
 
   reference.forEach((point) =>
@@ -179,6 +198,8 @@ export function GrowthChart({
   );
   data.sort((a, b) => a.age - b.age);
   const hasKrHistory = points.some((point) => point.khamisRoche !== null);
+  const hasTypeBand = curveSets.some((set) => set.band?.kind === "types");
+  const hasErrorBand = curveSets.some((set) => set.band?.kind === "error");
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
@@ -198,49 +219,6 @@ export function GrowthChart({
             dashed
           />
         ) : null}
-        {projection ? (
-          <LegendItem color={HEIGHT_COLOR} label="Trend (ohne Schubmodell)" dashed />
-        ) : null}
-        {shownTrajectories && activeCurve ? (
-          <LegendItem
-            thin
-            color={trajectoryColor}
-            label={`Verlauf ${timingLabels[activeCurve.group]} (Schub ca. ${formatAge(activeCurve.impliedPhvAge)})`}
-          />
-        ) : null}
-        {shownTrajectories && !activeCurve
-          ? shownTrajectories.curves.map((curve) => (
-              <LegendItem
-                thin
-                key={curve.group}
-                color={trajectoryColor}
-                label={`Verlauf wenn ${timingLabels[curve.group]} (Schub ca. ${formatAge(curve.impliedPhvAge)})`}
-              />
-            ))
-          : null}
-        {shownMirwald ? (
-          <LegendItem thin color={mirwaldColor} label="Verlauf Mirwald/Sherar" />
-        ) : null}
-        {shownMirwald?.band ? (
-          <span className="flex items-center gap-2">
-            <span
-              className="inline-block h-3 w-5 rounded-sm"
-              style={{ background: mirwaldColor, opacity: 0.2 }}
-            />
-            {shownMirwald.band.kind === "error"
-              ? "Fehlerbereich Mirwald/Sherar (95 %)"
-              : "Spanne der Typen (Mirwald/Sherar)"}
-          </span>
-        ) : null}
-        {shownTrajectories && shownTrajectories.curves.length > 1 ? (
-          <span className="flex items-center gap-2">
-            <span
-              className="inline-block h-3 w-5 rounded-sm"
-              style={{ background: trajectoryColor, opacity: 0.2 }}
-            />
-            Spanne der passenden Typen
-          </span>
-        ) : null}
         {available.map((prediction) => (
           <LegendItem
             key={prediction.id}
@@ -249,31 +227,31 @@ export function GrowthChart({
             dashed
           />
         ))}
+        {curveSets.length > 0 ? (
+          <LegendItem thin color="var(--color-foreground)" label="Möglicher Verlauf" />
+        ) : null}
+        {hasTypeBand ? (
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-5 rounded-sm"
+              style={{ background: "var(--color-foreground)", opacity: 0.25 }}
+            />
+            Band: je nach Entwicklungstyp
+          </span>
+        ) : null}
+        {hasErrorBand ? (
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-5 rounded-sm"
+              style={{ background: "var(--color-foreground)", opacity: 0.25 }}
+            />
+            Band: Fehlerbereich
+          </span>
+        ) : null}
       </div>
 
-      {trajectories ? (
-        <div className="mb-3">
-          <CurveToggle
-            checked={visible.has("trajectories")}
-            onChange={(on) => onToggle("trajectories", on)}
-            label="Entwicklungsverlauf nach Typ"
-            description="Verlauf je Entwicklungstyp zur Zielgröße im Diagramm anzeigen"
-            color={trajectoryColor}
-          />
-        </div>
-      ) : trajectoryNote ? (
-        <p className="mb-3 text-xs text-foreground/60">{trajectoryNote}</p>
-      ) : null}
-      {!trajectories && trend ? (
-        <div className="mb-3">
-          <CurveToggle
-            checked={visible.has("trend")}
-            onChange={(on) => onToggle("trend", on)}
-            label="Trend ohne Schubmodell"
-            description="Lineare Fortschreibung der aktuellen Wachstumsrate im Diagramm anzeigen"
-            color={HEIGHT_COLOR}
-          />
-        </div>
+      {notes.length > 0 ? (
+        <p className="mb-3 text-xs text-foreground/60">Kein Verlauf: {notes.join(" · ")}</p>
       ) : null}
 
       <ComposedChart
@@ -329,33 +307,22 @@ export function GrowthChart({
           isAnimationActive={false}
         />
 
-        {shownMirwald?.band ? (
-          <Area
-            type="monotone"
-            dataKey="mirwaldBand"
-            stroke="none"
-            fill={mirwaldColor}
-            fillOpacity={0.12}
-            connectNulls
-            tooltipType="none"
-            activeDot={false}
-            isAnimationActive={false}
-          />
-        ) : null}
-
-        {shownTrajectories && shownTrajectories.curves.length > 1 ? (
-          <Area
-            type="monotone"
-            dataKey="typeBand"
-            stroke="none"
-            fill={trajectoryColor}
-            fillOpacity={0.18}
-            connectNulls
-            tooltipType="none"
-            activeDot={false}
-            isAnimationActive={false}
-          />
-        ) : null}
+        {curveSets.map((set, setIndex) =>
+          set.band ? (
+            <Area
+              key={`${set.id}-band`}
+              type="monotone"
+              dataKey={`c${setIndex}b`}
+              stroke="none"
+              fill={set.color}
+              fillOpacity={0.14}
+              connectNulls
+              tooltipType="none"
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          ) : null,
+        )}
 
         {available.map((prediction) =>
           prediction.range ? (
@@ -363,8 +330,8 @@ export function GrowthChart({
               key={`${prediction.id}-area`}
               // Mit Verlaufsband öffnet sich der Fehlerbereich erst bis zum Ende der Kurve.
               x1={
-                prediction.id === "mirwald-sherar" && shownMirwald?.band?.kind === "error"
-                  ? shownMirwald.ages.at(-1)
+                prediction.id === "mirwald-sherar"
+                  ? (mirwaldErrorBandEnd ?? latest.age)
                   : latest.age
               }
               x2={xMax}
@@ -392,24 +359,14 @@ export function GrowthChart({
         ))}
 
         <Tooltip
-          labelFormatter={(value) => `Alter ${formatAge(Number(value))}`}
+          labelFormatter={(value) => `Alter ${Number(value).toFixed(1).replace(".", ",")} J.`}
           formatter={(value, name) => [
             formatCm(Number(value)),
             name === "height"
               ? "Größe"
-              : name === "projected"
-                ? "Trend"
-                : name === "mirwald"
-                  ? "Verlauf Mirwald/Sherar"
-                  : name === "typeLine"
-                    ? "Verlauf (bekannter Typ)"
-                    : name === "typeEarly"
-                      ? `Verlauf ${timingLabels.early}`
-                      : name === "typeAverage"
-                        ? `Verlauf ${timingLabels.average}`
-                        : name === "typeLate"
-                          ? `Verlauf ${timingLabels.late}`
-                          : "Khamis-Roche-Prognose",
+              : name === "khamisRoche"
+                ? "Khamis-Roche-Prognose"
+                : String(name),
           ]}
           contentStyle={{
             backgroundColor: "var(--color-header)",
@@ -434,62 +391,23 @@ export function GrowthChart({
           />
         ) : null}
 
-        {shownMirwald ? (
-          <Line
-            type="monotone"
-            dataKey="mirwald"
-            stroke={mirwaldColor}
-            strokeWidth={1}
-            dot={false}
-            activeDot={false}
-            connectNulls
-            isAnimationActive={false}
-          />
-        ) : null}
-
-        {shownTrajectories && activeCurve ? (
-          <Line
-            type="monotone"
-            dataKey="typeLine"
-            stroke={trajectoryColor}
-            strokeWidth={1}
-            dot={false}
-            activeDot={false}
-            connectNulls
-            isAnimationActive={false}
-          />
-        ) : null}
-
-        {shownTrajectories && !activeCurve
-          ? shownTrajectories.curves.map((curve) => (
-              <Line
-                key={curve.group}
-                type="monotone"
-                dataKey={lineKey[curve.group]}
-                stroke={trajectoryColor}
-                strokeWidth={1}
-                strokeDasharray={curve.group === "average" ? undefined : "2 3"}
-                dot={false}
-                activeDot={false}
-                connectNulls
-                isAnimationActive={false}
-              />
-            ))
-          : null}
-
-        {projection ? (
-          <Line
-            type="linear"
-            dataKey="projected"
-            stroke={HEIGHT_COLOR}
-            strokeDasharray="6 4"
-            strokeWidth={2}
-            dot={false}
-            activeDot={false}
-            connectNulls
-            isAnimationActive={false}
-          />
-        ) : null}
+        {curveSets.flatMap((set, setIndex) =>
+          set.lines.map((line, lineIndex) => (
+            <Line
+              key={`${set.id}-${lineIndex}`}
+              type="monotone"
+              dataKey={`c${setIndex}l${lineIndex}`}
+              name={line.name}
+              stroke={set.color}
+              strokeWidth={1}
+              strokeDasharray={line.dotted ? "2 3" : undefined}
+              dot={false}
+              activeDot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )),
+        )}
 
         <Line
           type="monotone"

@@ -15,7 +15,6 @@ import {
 import { ageInYears } from "@/lib/growth/age";
 import { buildReachSamples, type ReachTest } from "@/lib/growth/reach";
 import { PHV_TIMING_THRESHOLDS, classifyPhvTiming, timingLabels } from "@/lib/growth/timing";
-import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
 import {
   buildMirwaldCurve,
   buildTypeTrajectories,
@@ -128,6 +127,8 @@ export type TimingAssessment = {
   phvAge: number | null;
 };
 
+type AnalysisTrajectories = Partial<Record<TrajectoryModel, GrowthTrajectories>>;
+
 export type GrowthAnalysis = {
   points: GrowthPoint[];
   latest: GrowthPoint | null;
@@ -148,14 +149,12 @@ export type GrowthAnalysis = {
     { kind: "height" } | { kind: "reach"; scale: number; scaleSource: "measured" | "default" };
   /** Moore-Schätzung für das Alter beim Wachstumsschub, nur als Zahl und ohne Einstufung. */
   phvEstimate: { age: number; equation: string } | null;
-  /** Fortschreibung der Größenkurve (Trend, kein Prognosemodell). */
-  projection: ProjectionPoint[] | null;
   /** Modell, das die Kaskade als verlässlichste Zielgröße auswählt. */
   primaryPredictionId: PredictionModelId | null;
-  /** Verläufe je Entwicklungstyp zur Zielgröße der Hauptprognose (Sherar-Linse). */
-  trajectories: GrowthTrajectories | null;
-  /** Grund, warum `trajectories` fehlt. */
-  trajectoryNote: string | null;
+  /** Verlauf je Entwicklungstyp zur Zielgröße von Khamis-Roche bzw. Elterngröße. */
+  modelTrajectories: Partial<Record<TrajectoryModel, GrowthTrajectories>>;
+  /** Kurzer Grund je Modell mit Zielgröße, aber ohne Verlauf. */
+  curveNotes: Partial<Record<PredictionModelId, string>>;
   /** Verlauf zur Mirwald/Sherar-Zielgröße mit Band. */
   mirwaldCurve: MirwaldCurve | null;
 };
@@ -183,11 +182,14 @@ export function selectPrimaryPrediction(predictions: Prediction[]): PredictionMo
 }
 
 /**
- * Ab diesem Alter zeigen die Typ-Verläufe etwas: Davor passen alle drei Typen
- * zur Messung und der Schub liegt zu weit weg, um sie zu unterscheiden. Ein
- * beobachteter Gipfel hebt die Grenze auf.
+ * Ab diesem Alter zeigen die Typ-Verläufe etwas: Davor liegt der Schub so weit
+ * weg, dass sich die Typen kaum unterscheiden. Ein beobachteter Gipfel oder ein
+ * bekannter Typ hebt die Grenze auf.
  */
-export const TRAJECTORY_MIN_AGE: Record<GrowthSex, number> = { female: 11, male: 13 };
+export const TRAJECTORY_MIN_AGE: Record<GrowthSex, number> = { female: 9, male: 10 };
+
+/** Zielgrößen-Modelle, deren Verlauf aus den Typ-Kurven entsteht (Mirwald/Sherar hat eine eigene Kurve). */
+export type TrajectoryModel = "khamis-roche" | "mid-parent";
 
 /** Moore gilt nur rund um die Pubertät sinnvoll. */
 const ESTIMATE_MIN_AGE = 9;
@@ -460,31 +462,58 @@ export function buildGrowthAnalysis(
       : null;
 
   const primaryPredictionId = selectPrimaryPrediction(predictions);
-  const primary = predictions.find((prediction) => prediction.id === primaryPredictionId);
-  // Mit gesetzter Entwicklungsverzögerung zählt, wie bei "% erreicht", die Zielgröße mit Entwicklungsalter.
-  const trajectoryTarget =
-    primaryPredictionId === "khamis-roche" && adjustedTarget !== null
-      ? adjustedTarget
-      : (primary?.value ?? null);
   // Zeigen die Messungen keinen Schub, darf er rechnerisch nicht schon vorbei sein.
   const spurtUnconfirmed =
     peak.status !== "confirmed" &&
     (spurtAhead || timing?.source === "presumed" || profile.maturity_override !== null);
   const knownGroup = ms && ms.source !== "estimate" ? ms.group : null;
-  const trajectories =
-    latest &&
-    trajectoryTarget !== null &&
-    (peak.status === "confirmed" || knownGroup !== null || latest.age >= TRAJECTORY_MIN_AGE[sex])
-      ? buildTypeTrajectories({
-          sex,
-          age: latest.age,
-          heightCm: latest.height_cm,
-          targetCm: trajectoryTarget,
-          maxOffsetYears: spurtUnconfirmed ? 0 : null,
-          knownGroup,
-          knownOffsetYears: knownGroup && ms ? ms.offsetYears : null,
-        })
-      : null;
+
+  // Je Zielgrößen-Kachel ein Verlauf zu ihrer eigenen Zielgröße. Bei Khamis-Roche zählt, wie bei
+  // "% erreicht", die Zielgröße mit Entwicklungsalter, falls gesetzt.
+  const trajectoryTargets: Record<TrajectoryModel, number | null> = {
+    "khamis-roche":
+      adjustedTarget ?? predictions.find((p) => p.id === "khamis-roche")?.value ?? null,
+    "mid-parent": predictions.find((p) => p.id === "mid-parent")?.value ?? null,
+  };
+  const modelTrajectories: AnalysisTrajectories = {};
+  const curveNotes: GrowthAnalysis["curveNotes"] = {};
+  const tooYoung =
+    latest !== null &&
+    peak.status !== "confirmed" &&
+    knownGroup === null &&
+    latest.age < TRAJECTORY_MIN_AGE[sex];
+
+  for (const model of Object.keys(trajectoryTargets) as TrajectoryModel[]) {
+    const target = trajectoryTargets[model];
+
+    if (!latest || target === null) continue;
+
+    if (tooYoung) {
+      curveNotes[model] = `Verlauf erst ab ${TRAJECTORY_MIN_AGE[sex]} Jahren`;
+      continue;
+    }
+
+    if (target <= latest.height_cm) {
+      curveNotes[model] = "Zielgröße nicht über der aktuellen Größe";
+      continue;
+    }
+
+    const trajectories = buildTypeTrajectories({
+      sex,
+      age: latest.age,
+      heightCm: latest.height_cm,
+      targetCm: target,
+      maxOffsetYears: spurtUnconfirmed ? 0 : null,
+      knownGroup,
+      knownOffsetYears: knownGroup && ms ? ms.offsetYears : null,
+    });
+
+    if (trajectories) {
+      modelTrajectories[model] = trajectories;
+    } else {
+      curveNotes[model] = "Kein Verlauf berechenbar";
+    }
+  }
 
   const mirwaldCurve =
     latest && ms && ms.predictedHeightCm !== null && msBasisAge !== null
@@ -501,22 +530,8 @@ export function buildGrowthAnalysis(
         })
       : null;
 
-  // Warum es keinen Verlauf gibt, damit eine leere Fläche im Diagramm nicht rätselhaft bleibt.
-  let trajectoryNote: string | null = null;
-  if (!trajectories && latest) {
-    if (trajectoryTarget === null) {
-      trajectoryNote = "Kein Verlauf: keine Zielgröße berechenbar.";
-    } else if (trajectoryTarget < latest.height_cm) {
-      trajectoryNote = "Kein Verlauf: Zielgröße liegt unter der aktuellen Größe.";
-    } else if (
-      peak.status !== "confirmed" &&
-      knownGroup === null &&
-      latest.age < TRAJECTORY_MIN_AGE[sex]
-    ) {
-      trajectoryNote = `Kein Verlauf: erst ab ${TRAJECTORY_MIN_AGE[sex]} Jahren oder mit bekanntem Entwicklungstyp.`;
-    } else {
-      trajectoryNote = "Kein Verlauf: kein Entwicklungstyp passt zu Messung und Zielgröße.";
-    }
+  if (ms?.predictedHeightCm != null && !mirwaldCurve) {
+    curveNotes["mirwald-sherar"] = "Wachstum laut Sherar-Tabelle abgeschlossen";
   }
 
   return {
@@ -531,10 +546,9 @@ export function buildGrowthAnalysis(
     timing,
     velocitySource,
     phvEstimate,
-    projection: projectGrowth(points, sex),
     primaryPredictionId,
-    trajectories,
-    trajectoryNote,
+    modelTrajectories,
+    curveNotes,
     mirwaldCurve,
   };
 }

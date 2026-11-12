@@ -1,4 +1,5 @@
 import {
+  SHERAR_GROUP_PHV_AGE,
   SHERAR_LEFT_TO_GROW_CM,
   SHERAR_MAX_OFFSET,
   SHERAR_MIN_OFFSET,
@@ -71,6 +72,8 @@ type Candidate = {
   group: GrowthMaturity;
   impliedPhvAge: number;
   shaped: boolean;
+  /** Abstand zum Schub, bei dem die geformte Kurve beginnt. */
+  offset?: number;
   heightAt: (age: number) => number;
 };
 
@@ -88,6 +91,9 @@ type Candidate = {
  * - das abgeleitete Schubalter nicht in sein Altersband fällt, oder
  * - der Schub rechnerisch schon vorbei wäre (`maxOffsetYears`), obwohl die
  *   Messungen das nicht zeigen.
+ *
+ * Passt kein Typ genau und ist keiner bekannt, zeigt jeder der drei Typen seinen
+ * Verlauf ab dem mittleren Schubalter des Typs ("wenn Typ so, dann so").
  *
  * Für den bekannten Typ (beobachtet, festgelegt oder angenommen) gibt es immer
  * eine Fortsetzung: Passt die genaue Kurve nicht, weil Zielgröße und Tabelle von
@@ -138,23 +144,47 @@ export function buildTypeTrajectories(input: {
     ];
   });
 
+  /**
+   * Form des Sherar-Verlaufs eines Typs ab einem Abstand zum Schub, auf die Strecke
+   * von der Messung zur Zielgröße gestreckt.
+   */
+  const shapedCandidate = (group: GrowthMaturity, rawOffset: number): Candidate | null => {
+    const offset = Math.min(Math.max(rawOffset, SHERAR_MIN_OFFSET), SHERAR_MAX_OFFSET);
+    const leftNow = sherarLeftToGrow(sex, group, offset);
+
+    if (leftNow === null || leftNow <= 0) return null;
+
+    return {
+      group,
+      impliedPhvAge: age - rawOffset,
+      shaped: true,
+      offset,
+      heightAt: (current) => {
+        const left = sherarLeftToGrow(sex, group, offset + (current - age));
+        const done = left === null ? 1 : 1 - Math.min(left, leftNow) / leftNow;
+        return heightCm + remaining * done;
+      },
+    };
+  };
+
   const knownOffset = input.knownOffsetYears ?? null;
 
   if (knownGroup && knownOffset !== null && !candidates.some((c) => c.group === knownGroup)) {
-    const offset = Math.min(Math.max(knownOffset, SHERAR_MIN_OFFSET), SHERAR_MAX_OFFSET);
-    const leftNow = sherarLeftToGrow(sex, knownGroup, offset);
+    const known = shapedCandidate(knownGroup, knownOffset);
+    if (known) candidates.push(known);
+  }
 
-    if (leftNow !== null && leftNow > 0) {
-      candidates.push({
-        group: knownGroup,
-        impliedPhvAge: age - knownOffset,
-        shaped: true,
-        heightAt: (current) => {
-          const left = sherarLeftToGrow(sex, knownGroup, offset + (current - age));
-          const done = left === null ? 1 : 1 - Math.min(left, leftNow) / leftNow;
-          return heightCm + remaining * done;
-        },
-      });
+  // Passt kein Typ genau und ist keiner bekannt, zeigt jeder Typ, wie sein Verlauf
+  // aussähe: Schub zum mittleren Alter des Typs, nie schon vorbei ohne Beleg.
+  if (candidates.length === 0 && knownGroup === null) {
+    const cap = maxOffsetYears ?? SHERAR_MAX_OFFSET;
+
+    for (const group of GROUPS) {
+      const candidate = shapedCandidate(
+        group,
+        Math.min(age - SHERAR_GROUP_PHV_AGE[sex][group], cap),
+      );
+      if (candidate) candidates.push(candidate);
     }
   }
 
@@ -165,9 +195,7 @@ export function buildTypeTrajectories(input: {
   // Ende: Der Verlauf ist 4 Jahre nach dem Schub abgeschlossen.
   const endOf = (candidate: Candidate) =>
     candidate.shaped
-      ? age +
-        SHERAR_MAX_OFFSET -
-        Math.min(Math.max(knownOffset ?? 0, SHERAR_MIN_OFFSET), SHERAR_MAX_OFFSET)
+      ? age + SHERAR_MAX_OFFSET - (candidate.offset ?? 0)
       : candidate.impliedPhvAge + SHERAR_MAX_OFFSET;
   const endAge = Math.max(...candidates.map(endOf));
   const ages: number[] = [];

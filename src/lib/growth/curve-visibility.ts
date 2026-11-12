@@ -1,18 +1,11 @@
 import type { PredictionModelId } from "@/lib/growth/analysis";
 
 /**
- * Kurven im Wachstumsdiagramm, die sich ein- und ausschalten lassen. Die
- * Khamis-Roche-Variante mit Entwicklungsalter folgt der Khamis-Roche-Kachel.
- * trajectories: Verläufe je Entwicklungstyp; trend: lineare Fortschreibung,
- * nur als Rückfall, wenn es keine Typ-Verläufe gibt.
+ * Zielgrößen-Kacheln, die sich im Diagramm ein- und ausschalten lassen. Zu
+ * jeder gehören Zielmarke, Fehlerbereich und Verlauf. Die Khamis-Roche-Variante
+ * mit Entwicklungsalter folgt der Khamis-Roche-Kachel.
  */
-export const CURVE_KEYS = [
-  "khamis-roche",
-  "mid-parent",
-  "mirwald-sherar",
-  "trajectories",
-  "trend",
-] as const;
+export const CURVE_KEYS = ["khamis-roche", "mid-parent", "mirwald-sherar"] as const;
 
 export type CurveKey = (typeof CURVE_KEYS)[number];
 
@@ -22,9 +15,9 @@ export const CURVES_PARAM = "kurven";
 const isCurveKey = (value: string): value is CurveKey =>
   (CURVE_KEYS as readonly string[]).includes(value);
 
-/** Standard: Hauptprognose und Typ-Verläufe an, alles andere aus. */
+/** Standard: nur die Hauptquelle an. */
 export function defaultVisibleCurves(primary: PredictionModelId | null): Set<CurveKey> {
-  const visible = new Set<CurveKey>(["trajectories"]);
+  const visible = new Set<CurveKey>();
 
   if (primary && isCurveKey(primary)) {
     visible.add(primary);
