@@ -408,11 +408,8 @@ export function AthleteGrowthPage() {
               visible={visibleCurves}
             />
             <p className="mt-3 text-xs text-foreground/50">
-              Gestrichelt: Zielgröße der aktiven Kachel, schattiert ihr Fehlerbereich
-              (Mirwald/Sherar nur bei beobachtetem Schub). Dünne Linien: möglicher Verlauf dorthin
-              nach Sherar et al. (2005), ab der letzten Messung. Das Band darum zeigt, wie sich der
-              Verlauf je nach Entwicklungstyp unterscheidet, und nicht, wie sicher die Zielgröße
-              ist.
+              Gestrichelt: Zielgröße, schattiert: ihr Fehlerbereich. Dünne Linie und Band: möglicher
+              Verlauf je nach Entwicklungstyp (Sherar et al. 2005).
             </p>
           </section>
 
