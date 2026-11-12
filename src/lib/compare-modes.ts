@@ -10,6 +10,6 @@ export type CompareMode = "comparison" | "ranking" | "development" | "growth";
 export const compareModes: { mode: CompareMode; path: string; label: string }[] = [
   { mode: "comparison", path: "/compare", label: "Leistungsvergleich" },
   { mode: "ranking", path: "/compare/ranking", label: "Ranking" },
-  { mode: "development", path: "/compare/development", label: "Entwicklung" },
-  { mode: "growth", path: "/compare/growth", label: "Wachstum" },
+  { mode: "development", path: "/compare/development", label: "Leistungsentwicklung" },
+  { mode: "growth", path: "/compare/growth", label: "Körperwachstum" },
 ];
