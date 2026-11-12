@@ -27,6 +27,8 @@ type GrowthChartProps = {
   predictions: Prediction[];
   projection: ProjectionPoint[] | null;
   trajectories: GrowthTrajectories | null;
+  /** Grund, warum es keine Typ-Verläufe gibt. */
+  trajectoryNote: string | null;
   /** Modell, an dessen Zielgröße die Typ-Verläufe enden. */
   primaryId: PredictionModelId | null;
   sex: GrowthSex;
@@ -42,6 +44,7 @@ export function GrowthChart({
   predictions,
   projection: trend,
   trajectories,
+  trajectoryNote,
   primaryId,
   sex,
   visible,
@@ -215,7 +218,10 @@ export function GrowthChart({
             color={trajectoryColor}
           />
         </div>
-      ) : trend ? (
+      ) : trajectoryNote ? (
+        <p className="mb-3 text-xs text-foreground/60">{trajectoryNote}</p>
+      ) : null}
+      {!trajectories && trend ? (
         <div className="mb-3">
           <CurveToggle
             checked={visible.has("trend")}

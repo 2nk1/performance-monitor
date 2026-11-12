@@ -101,6 +101,8 @@ export type Prediction = {
   range: number | null;
   /** Datum der Messung, auf der die Prognose beruht (Khamis-Roche, Mirwald/Sherar). */
   basisDate: string | null;
+  /** Kurzform der Datengrundlage, nur Mirwald/Sherar ("Schub beobachtet" usw.). */
+  basisLabel: string | null;
   /** Fehlende Eingaben, falls `value` null ist. */
   missing: string[];
 };
@@ -147,6 +149,8 @@ export type GrowthAnalysis = {
   primaryPredictionId: PredictionModelId | null;
   /** Verläufe je Entwicklungstyp zur Zielgröße der Hauptprognose (Sherar-Linse). */
   trajectories: GrowthTrajectories | null;
+  /** Grund, warum `trajectories` fehlt. */
+  trajectoryNote: string | null;
 };
 
 /**
@@ -260,6 +264,7 @@ export function buildGrowthAnalysis(
       value: krBasis?.khamisRoche ?? null,
       range: KHAMIS_ROCHE_ERROR_90_CM[sex],
       basisDate: krBasis?.measured_at ?? null,
+      basisLabel: null,
       missing: krBasis ? [] : krMissing,
     },
     {
@@ -269,6 +274,7 @@ export function buildGrowthAnalysis(
       value: hasParents ? midParentTargetHeight(sex, mother_height_cm, father_height_cm) : null,
       range: MID_PARENT_RANGE_CM,
       basisDate: null,
+      basisLabel: null,
       missing: hasParents ? [] : ["Größe beider Eltern"],
     },
   ];
@@ -303,6 +309,7 @@ export function buildGrowthAnalysis(
       value: adjusted,
       range: null,
       basisDate: krBasis?.measured_at ?? null,
+      basisLabel: null,
       missing:
         adjusted !== null
           ? []
@@ -365,6 +372,7 @@ export function buildGrowthAnalysis(
     peak.status === "pending" && peak.reason !== "no-rise" && peak.reason !== "no-drop";
   let ms: MirwaldSherarResult | null = null;
   let msBasisText: string | null = null;
+  let msBasisLabel: string | null = null;
   let msBasisDate: string | null = msBasis?.measured_at ?? null;
 
   if (msBasis) {
@@ -378,13 +386,15 @@ export function buildGrowthAnalysis(
         group: manual ?? sherarMaturityGroup(sex, peak.age),
         source: "observed",
       });
-      msBasisText = `Schub bei ${formatYears(peak.age)} J. beobachtet`;
+      msBasisText = `Schub bei ${formatYears(peak.age)} J. beobachtet, ${timingLabels[ms.group]}`;
+      msBasisLabel = "Schub beobachtet";
     } else if (manual || timing?.source === "presumed") {
       const group = manual ?? timing?.timing ?? "late";
       // Ohne bestätigten Gipfel liegt der Schub noch vor dem Kind oder läuft gerade.
       const offsetYears = Math.min(msBasis.age - SHERAR_GROUP_PHV_AGE[sex][group], 0);
       ms = predictFromOffset({ ...base, offsetYears, group, source: "group" });
       msBasisText = `Schub noch nicht beobachtet, Typ ${timingLabels[group]}`;
+      msBasisLabel = manual ? "Typ festgelegt" : "Typ angenommen";
     } else {
       // Rückfall: Mirwald braucht Sitzhöhe und Gewicht, es zählt die jüngste Messung mit beidem.
       const full = [...points]
@@ -407,7 +417,8 @@ export function buildGrowthAnalysis(
               source: "estimate",
             })
           : estimate;
-        msBasisText = `Schub geschätzt ${ms.offsetYears > 0 ? "+" : ""}${formatYears(ms.offsetYears)} J.`;
+        msBasisText = `Schub geschätzt ${ms.offsetYears > 0 ? "+" : ""}${formatYears(ms.offsetYears)} J., ${timingLabels[ms.group]}`;
+        msBasisLabel = "Schub geschätzt";
         msBasisDate = full.measured_at;
       }
     }
@@ -424,11 +435,8 @@ export function buildGrowthAnalysis(
   predictions.push({
     id: "mirwald-sherar",
     label: "Mirwald/Sherar",
-    description: ms
-      ? `${msBasisText}, ${timingLabels[ms.group]}${
-          ms.source === "observed" ? "" : ". Ohne beobachteten Schub, daher ohne Fehlerbereich"
-        }`
-      : null,
+    description: ms ? msBasisText : null,
+    basisLabel: ms ? msBasisLabel : null,
     value: ms?.predictedHeightCm ?? null,
     // Der Fehlerbereich gilt nur, wenn der Abstand zum Schub aus den Messungen stammt.
     range: ms?.source === "observed" ? SHERAR_ERROR_95_CM[sex] : null,
@@ -452,19 +460,39 @@ export function buildGrowthAnalysis(
   const spurtUnconfirmed =
     peak.status !== "confirmed" &&
     (spurtAhead || timing?.source === "presumed" || profile.maturity_override !== null);
+  const knownGroup = ms && ms.source !== "estimate" ? ms.group : null;
   const trajectories =
     latest &&
     trajectoryTarget !== null &&
-    (peak.status === "confirmed" || latest.age >= TRAJECTORY_MIN_AGE[sex])
+    (peak.status === "confirmed" || knownGroup !== null || latest.age >= TRAJECTORY_MIN_AGE[sex])
       ? buildTypeTrajectories({
           sex,
           age: latest.age,
           heightCm: latest.height_cm,
           targetCm: trajectoryTarget,
           maxOffsetYears: spurtUnconfirmed ? 0 : null,
-          knownGroup: ms && ms.source !== "estimate" ? ms.group : null,
+          knownGroup,
+          knownOffsetYears: knownGroup && ms ? ms.offsetYears : null,
         })
       : null;
+
+  // Warum es keinen Verlauf gibt, damit eine leere Fläche im Diagramm nicht rätselhaft bleibt.
+  let trajectoryNote: string | null = null;
+  if (!trajectories && latest) {
+    if (trajectoryTarget === null) {
+      trajectoryNote = "Kein Verlauf: keine Zielgröße berechenbar.";
+    } else if (trajectoryTarget < latest.height_cm) {
+      trajectoryNote = "Kein Verlauf: Zielgröße liegt unter der aktuellen Größe.";
+    } else if (
+      peak.status !== "confirmed" &&
+      knownGroup === null &&
+      latest.age < TRAJECTORY_MIN_AGE[sex]
+    ) {
+      trajectoryNote = `Kein Verlauf: erst ab ${TRAJECTORY_MIN_AGE[sex]} Jahren oder mit bekanntem Entwicklungstyp.`;
+    } else {
+      trajectoryNote = "Kein Verlauf: kein Entwicklungstyp passt zu Messung und Zielgröße.";
+    }
+  }
 
   return {
     points,
@@ -481,5 +509,6 @@ export function buildGrowthAnalysis(
     projection: projectGrowth(points, sex),
     primaryPredictionId,
     trajectories,
+    trajectoryNote,
   };
 }

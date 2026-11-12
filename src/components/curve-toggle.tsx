@@ -1,8 +1,8 @@
 type CurveToggleProps = {
   checked: boolean;
   onChange: (next: boolean) => void;
-  /** Sichtbarer Text neben dem Schalter. */
-  label: string;
+  /** Sichtbarer Text neben dem Schalter; ohne Text bleibt nur der Schalter. */
+  label?: string;
   /** Vollständige Beschreibung für Screenreader. */
   description: string;
   color: string;
@@ -11,7 +11,7 @@ type CurveToggleProps = {
 
 /**
  * Schalter für eine Kurve im Diagramm. Der Zustand zeigt sich an Stellung und
- * Häkchen, nicht nur an der Farbe; der Text bleibt in beiden Zuständen gleich.
+ * Häkchen, nicht nur an der Farbe; ein Text daneben bleibt in beiden Zuständen gleich.
  */
 export function CurveToggle({
   checked,

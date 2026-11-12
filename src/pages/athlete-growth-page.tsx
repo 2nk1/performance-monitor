@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CurveToggle } from "@/components/curve-toggle";
@@ -36,24 +36,20 @@ const formatNumber = (value: number, decimals = 1) =>
   });
 
 /** Eine kurze Zeile unter dem Entwicklungstyp. */
-function timingSummary(
-  timing: GrowthAnalysis["timing"],
-  analysis: GrowthAnalysis,
-  velocity: string,
-): string {
+function timingSummary(timing: GrowthAnalysis["timing"], analysis: GrowthAnalysis): string {
   if (!timing) {
     return analysis.phvEstimate
-      ? `Schub laut Moore ca. ${formatNumber(analysis.phvEstimate.age)} J.${velocity}`
-      : `Noch kein Schub in Sicht${velocity}`;
+      ? `Schub laut Moore ca. ${formatNumber(analysis.phvEstimate.age)} J.`
+      : "Noch kein Schub in Sicht";
   }
 
   switch (timing.source) {
     case "manual":
-      return `Manuell festgelegt${velocity}`;
+      return "Festgelegt";
     case "observed":
-      return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J.${velocity}`;
+      return `Gipfel bei ${formatNumber(timing.phvAge ?? 0)} J.`;
     case "presumed":
-      return `Kein Gipfel bis ${formatNumber(analysis.latest?.age ?? 0)} J.${velocity}`;
+      return "Angenommen";
   }
 }
 
@@ -71,6 +67,124 @@ function timingTooltip(timing: GrowthAnalysis["timing"], sex: GrowthSex): string
     case "presumed":
       return `Älter als die Spät-Grenze (${formatNumber(PHV_TIMING_THRESHOLDS[sex].late)} J.) und noch kein Schub sichtbar. Ein sehr flacher Schub könnte im Messrauschen untergehen.`;
   }
+}
+
+type PredictionTileProps = {
+  prediction: GrowthAnalysis["predictions"][number];
+  analysis: GrowthAnalysis;
+  /** Khamis-Roche mit Entwicklungsalter, nur an der Khamis-Roche-Kachel. */
+  adjusted: GrowthAnalysis["predictions"][number] | null;
+  isPrimary: boolean;
+  checked: boolean;
+  onToggle: (on: boolean) => void;
+};
+
+/** Eine Zielgrößen-Kachel: Wert, Bereich, eine Statuszeile; Details stehen im Tooltip. */
+function PredictionTile({
+  prediction,
+  analysis,
+  adjusted,
+  isPrimary,
+  checked,
+  onToggle,
+}: PredictionTileProps) {
+  const color = predictionColors[prediction.id];
+  const isKhamisRoche = prediction.id === "khamis-roche";
+  const stale =
+    prediction.basisDate && prediction.basisDate !== analysis.latest?.measured_at
+      ? prediction.basisDate
+      : null;
+
+  return (
+    <div
+      className="flex flex-col rounded-xl border border-card-border bg-card p-5"
+      style={{ borderTop: `3px solid ${color}` }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="text-sm text-foreground/60">{prediction.label}</p>
+          {isPrimary ? (
+            <span
+              className="rounded-full border border-card-border px-2 py-0.5 text-[11px] text-foreground/70"
+              title="Verlässlichste berechenbare Quelle (Khamis-Roche vor Elterngröße vor Mirwald/Sherar). Die Typ-Verläufe enden bei dieser Zielgröße."
+            >
+              Hauptquelle
+            </span>
+          ) : null}
+        </div>
+        {prediction.value !== null ? (
+          <CurveToggle
+            checked={checked}
+            onChange={onToggle}
+            description={`Zielgröße ${prediction.label} im Diagramm anzeigen`}
+            color={color}
+          />
+        ) : null}
+      </div>
+
+      {prediction.value !== null ? (
+        <>
+          <p className="mt-2 text-3xl font-semibold">
+            {formatNumber(prediction.value)} <span className="text-lg">cm</span>
+          </p>
+          {prediction.range ? (
+            <p className="mt-1 text-sm text-foreground/60">
+              {formatNumber(prediction.value - prediction.range)} –{" "}
+              {formatNumber(prediction.value + prediction.range)}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-foreground/60">Es fehlt: {prediction.missing.join(", ")}</p>
+      )}
+
+      {prediction.basisLabel && prediction.value !== null ? (
+        <p className="mt-1 text-sm text-foreground/60" title={prediction.description ?? undefined}>
+          {prediction.basisLabel}
+          {prediction.range === null ? " · kein Fehlerbereich" : ""}
+        </p>
+      ) : null}
+
+      {isKhamisRoche && analysis.percentOfTarget !== null ? (
+        <p
+          className="mt-1 text-sm text-foreground/60"
+          title={
+            adjusted?.value != null
+              ? "Aktuelle Größe in % der Zielgröße mit Entwicklungsalter"
+              : "Aktuelle Größe in % der Zielgröße"
+          }
+        >
+          {formatNumber(analysis.percentOfTarget)} % erreicht
+        </p>
+      ) : null}
+
+      {adjusted ? (
+        <p className="mt-1 text-sm text-foreground/60" title={adjusted.description ?? undefined}>
+          {adjusted.value !== null ? (
+            <>
+              mit Entw.-Alter{" "}
+              <span style={{ color: predictionColors["khamis-roche-adjusted"] }}>
+                {formatNumber(adjusted.value)} cm
+              </span>
+            </>
+          ) : (
+            `mit Entw.-Alter: es fehlt ${adjusted.missing.join(", ")}`
+          )}
+        </p>
+      ) : null}
+
+      {stale && prediction.value !== null ? (
+        <p
+          className="mt-auto pt-3 text-xs text-foreground/50"
+          title={`Letzte Messung mit ${
+            prediction.id === "mirwald-sherar" ? "Sitzhöhe und Gewicht" : "Gewicht"
+          }`}
+        >
+          Stand {formatTestDate(stale)}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -245,139 +359,40 @@ export function AthleteGrowthPage() {
         </div>
       ) : (
         <>
-          <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {analysis.predictions
-              .filter((prediction) => prediction.id !== "khamis-roche-adjusted")
-              .map((prediction) => (
-                <Fragment key={prediction.id}>
-                  <div
-                    className="flex flex-col rounded-xl border border-card-border bg-card p-5"
-                    style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
-                      {prediction.id === analysis.primaryPredictionId ? (
-                        <span
-                          className="rounded-full border border-card-border px-2 py-0.5 text-[11px] text-foreground/70"
-                          title="Verlässlichste Quelle, die sich berechnen lässt: Khamis-Roche vor Elterngröße vor Mirwald/Sherar. Die Typ-Verläufe enden bei dieser Zielgröße."
-                        >
-                          Hauptquelle
-                        </span>
-                      ) : null}
-                    </div>
-                    {prediction.value !== null ? (
-                      <>
-                        <p className="mt-2 text-3xl font-semibold">
-                          {formatNumber(prediction.value)} <span className="text-lg">cm</span>
-                        </p>
-                        {prediction.range ? (
-                          <p className="mt-1 text-sm text-foreground/60">
-                            {formatNumber(prediction.value - prediction.range)} –{" "}
-                            {formatNumber(prediction.value + prediction.range)} cm
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <p className="mt-2 text-sm text-foreground/60">
-                        Nicht berechenbar. Es fehlt: {prediction.missing.join(", ")}
-                      </p>
-                    )}
-                    {prediction.id === "khamis-roche" && adjustedPrediction ? (
-                      <div
-                        className="mt-3 border-t border-card-border pt-3"
-                        title={adjustedPrediction.description ?? undefined}
-                      >
-                        <p className="text-xs text-foreground/60">mit Entwicklungsalter</p>
-                        {adjustedPrediction.value !== null ? (
-                          <p
-                            className="mt-1 text-xl font-semibold"
-                            style={{ color: predictionColors["khamis-roche-adjusted"] }}
-                          >
-                            {formatNumber(adjustedPrediction.value)}{" "}
-                            <span className="text-sm">cm</span>
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-sm text-foreground/60">
-                            Nicht berechenbar. Es fehlt: {adjustedPrediction.missing.join(", ")}
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
-                    {(() => {
-                      const footer =
-                        prediction.basisDate &&
-                        prediction.basisDate !== analysis.latest?.measured_at
-                          ? `Stand ${formatTestDate(prediction.basisDate)} (letzte Messung mit ${
-                              prediction.id === "mirwald-sherar"
-                                ? "Sitzhöhe und Gewicht"
-                                : "Gewicht"
-                            })`
-                          : prediction.description;
+          <section className="mb-8">
+            <h2 className="mb-3 text-sm font-medium text-foreground/60">Zielgröße</h2>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {analysis.predictions
+                .filter((prediction) => prediction.id !== "khamis-roche-adjusted")
+                .map((prediction) => (
+                  <PredictionTile
+                    key={prediction.id}
+                    prediction={prediction}
+                    analysis={analysis}
+                    adjusted={prediction.id === "khamis-roche" ? adjustedPrediction : null}
+                    isPrimary={prediction.id === analysis.primaryPredictionId}
+                    checked={visibleCurves.has(prediction.id as CurveKey)}
+                    onToggle={(on) => toggleCurve(prediction.id as CurveKey, on)}
+                  />
+                ))}
 
-                      return footer ? (
-                        <p className="mt-3 text-xs text-foreground/50">{footer}</p>
-                      ) : null;
-                    })()}
-                    {prediction.value !== null ? (
-                      <div className="mt-auto pt-3">
-                        <CurveToggle
-                          checked={visibleCurves.has(prediction.id as CurveKey)}
-                          onChange={(on) => toggleCurve(prediction.id as CurveKey, on)}
-                          label="Im Diagramm"
-                          description={`Zielgröße ${prediction.label} im Diagramm anzeigen`}
-                          color={predictionColors[prediction.id]}
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                  {prediction.id === "khamis-roche" ? (
-                    <div
-                      className="rounded-xl border border-card-border bg-card p-5"
-                      style={{
-                        borderTop: `3px solid ${
-                          adjustedPrediction?.value != null
-                            ? predictionColors["khamis-roche-adjusted"]
-                            : predictionColors["khamis-roche"]
-                        }`,
-                      }}
-                      title={
-                        analysis.predictions.some(
-                          (p) => p.id === "khamis-roche-adjusted" && p.value !== null,
-                        )
-                          ? "Aktuelle Größe in % der Khamis-Roche-Zielgröße mit Entwicklungsalter"
-                          : "Aktuelle Größe in % der Khamis-Roche-Zielgröße"
-                      }
-                    >
-                      <p className="text-sm text-foreground/60">Erreicht · Khamis-Roche</p>
-                      {analysis.percentOfTarget !== null ? (
-                        <p className="mt-2 text-3xl font-semibold">
-                          {formatNumber(analysis.percentOfTarget)} %
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-sm text-foreground/60">Braucht Khamis-Roche</p>
-                      )}
-                    </div>
-                  ) : null}
-                </Fragment>
-              ))}
-
-            <div
-              className="rounded-xl border border-card-border bg-card p-5"
-              title={timingTooltip(analysis.timing, profile.sex)}
-            >
-              <p className="text-sm text-foreground/60">Entwicklungstyp</p>
-              <p className="mt-2 text-xl font-semibold break-words">
-                {analysis.timing ? timingLabels[analysis.timing.timing] : "Noch nicht einstufbar"}
-              </p>
-              <p className="mt-1 text-sm text-foreground/60">
-                {timingSummary(
-                  analysis.timing,
-                  analysis,
-                  analysis.growthVelocity !== null
-                    ? ` · ${formatNumber(analysis.growthVelocity)} cm/Jahr`
-                    : "",
-                )}
-              </p>
+              <div
+                className="rounded-xl border border-card-border bg-card p-5"
+                title={timingTooltip(analysis.timing, profile.sex)}
+              >
+                <p className="text-sm text-foreground/60">Entwicklungstyp</p>
+                <p className="mt-2 text-xl font-semibold break-words">
+                  {analysis.timing ? timingLabels[analysis.timing.timing] : "Noch nicht einstufbar"}
+                </p>
+                <p className="mt-1 text-sm text-foreground/60">
+                  {timingSummary(analysis.timing, analysis)}
+                </p>
+                {analysis.growthVelocity !== null ? (
+                  <p className="mt-1 text-sm text-foreground/60">
+                    {formatNumber(analysis.growthVelocity)} cm/Jahr
+                  </p>
+                ) : null}
+              </div>
             </div>
           </section>
 
@@ -388,6 +403,7 @@ export function AthleteGrowthPage() {
               predictions={analysis.predictions}
               projection={analysis.projection}
               trajectories={analysis.trajectories}
+              trajectoryNote={analysis.trajectoryNote}
               primaryId={analysis.primaryPredictionId}
               sex={profile.sex}
               visible={visibleCurves}
@@ -400,9 +416,10 @@ export function AthleteGrowthPage() {
               Entwicklungsverlauf: Verläufe nach Sherar et al. (2005) durch die letzte Messung zur
               Zielgröße der Hauptquelle. Sie zeigen, wie die Größe wahrscheinlich dorthin kommt,
               nicht die Unsicherheit der Zielgröße. Das Band spannt alle Typen auf, zu denen die
-              Messung passt. Ohne Typ-Verläufe lässt sich ein Trend zuschalten: aktuelle Rate, die
-              linear bis {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
-              Wachstumsschub.
+              Messung passt. Passt die Zielgröße nicht zur Tabelle des bekannten Typs, ist dessen
+              Kurve auf die Zielgröße gestreckt. Ohne Typ-Verläufe lässt sich ein Trend zuschalten:
+              aktuelle Rate, die linear bis {profile.sex === "male" ? "19" : "17"} Jahre ausläuft,
+              ohne Modell für den Wachstumsschub.
             </p>
           </section>
 
