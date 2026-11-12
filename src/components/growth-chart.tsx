@@ -9,9 +9,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { GrowthPoint, Prediction } from "@/lib/growth/analysis";
+import { CurveToggle } from "@/components/curve-toggle";
+import type { GrowthPoint, Prediction, PredictionModelId } from "@/lib/growth/analysis";
+import type { CurveKey } from "@/lib/growth/curve-visibility";
 import { referenceCurve } from "@/lib/growth/percentiles";
 import type { ProjectionPoint } from "@/lib/growth/projection";
+import { timingLabels } from "@/lib/growth/timing";
+import type { GrowthTrajectories } from "@/lib/growth/trajectory";
 import type { GrowthSex } from "@/lib/types";
 import { predictionColors } from "@/lib/growth/colors";
 import { getSeriesColor } from "@/lib/series-colors";
@@ -22,13 +26,27 @@ type GrowthChartProps = {
   points: GrowthPoint[];
   predictions: Prediction[];
   projection: ProjectionPoint[] | null;
+  trajectories: GrowthTrajectories | null;
+  /** Modell, an dessen Zielgröße die Typ-Verläufe enden. */
+  primaryId: PredictionModelId | null;
   sex: GrowthSex;
+  visible: Set<CurveKey>;
+  onToggle: (key: CurveKey, on: boolean) => void;
 };
 
 const formatAge = (age: number) => `${age.toFixed(1).replace(".", ",")} J.`;
 const formatCm = (value: number) => `${value.toFixed(1).replace(".", ",")} cm`;
 
-export function GrowthChart({ points, predictions, projection, sex }: GrowthChartProps) {
+export function GrowthChart({
+  points,
+  predictions,
+  projection: trend,
+  trajectories,
+  primaryId,
+  sex,
+  visible,
+  onToggle,
+}: GrowthChartProps) {
   if (points.length === 0) {
     return (
       <div className="flex h-72 items-center justify-center rounded-xl border border-card-border bg-card text-sm text-foreground/60">
@@ -38,15 +56,24 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
   }
 
   const latest = points[points.length - 1];
+  // Die Variante mit Entwicklungsalter folgt der Khamis-Roche-Kachel.
   const available = predictions.filter(
-    (prediction): prediction is Prediction & { value: number } => prediction.value !== null,
+    (prediction): prediction is Prediction & { value: number } =>
+      prediction.value !== null &&
+      visible.has(prediction.id === "khamis-roche-adjusted" ? "khamis-roche" : prediction.id),
   );
+
+  // Die lineare Fortschreibung ist nur der Rückfall, wenn es keine Typ-Verläufe gibt.
+  const projection = !trajectories && visible.has("trend") ? trend : null;
+  const shownTrajectories = trajectories && visible.has("trajectories") ? trajectories : null;
+  const trajectoryColor = predictionColors[primaryId ?? "khamis-roche"];
 
   const xMin = Math.floor(points[0].age) - 0.5;
   const xMax = Math.max(
     18.5,
     Math.ceil(latest.age) + 1,
     Math.ceil(projection?.at(-1)?.age ?? 0) + 0.5,
+    Math.ceil(shownTrajectories?.ages.at(-1) ?? 0) + 0.5,
   );
 
   const reference = referenceCurve(sex, xMin, xMax);
@@ -56,6 +83,7 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
     ...points.map((point) => point.height_cm),
     ...points.flatMap((point) => (point.khamisRoche !== null ? [point.khamisRoche] : [])),
     ...(projection?.map((point) => point.height) ?? []),
+    ...(shownTrajectories ? [shownTrajectories.target] : []),
     ...available.flatMap((prediction) => [
       prediction.value - (prediction.range ?? 0),
       prediction.value + (prediction.range ?? 0),
@@ -73,6 +101,13 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
     /** KiGGS-Referenz: Bereich P3 bis P97 und Median. */
     band?: [number, number];
     median?: number;
+    /** Spanne aller zur Messung passenden Entwicklungstypen. */
+    typeBand?: [number, number];
+    /** Verlauf des bekannten Typs. */
+    typeLine?: number;
+    typeEarly?: number;
+    typeAverage?: number;
+    typeLate?: number;
   };
 
   const data: Row[] = points.map((point, index) => ({
@@ -84,6 +119,30 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
   }));
 
   projection?.slice(1).forEach((point) => data.push({ age: point.age, projected: point.height }));
+
+  const lineKey = { early: "typeEarly", average: "typeAverage", late: "typeLate" } as const;
+  const activeCurve = shownTrajectories?.curves.find(
+    (curve) => curve.group === shownTrajectories.activeGroup,
+  );
+
+  shownTrajectories?.ages.forEach((age, index) => {
+    const heights = shownTrajectories.curves.map((curve) => curve.heights[index]);
+    const row: Row = { age };
+
+    if (shownTrajectories.curves.length > 1) {
+      row.typeBand = [Math.min(...heights), Math.max(...heights)];
+    }
+
+    if (activeCurve) {
+      row.typeLine = activeCurve.heights[index];
+    } else {
+      shownTrajectories.curves.forEach((curve) => {
+        row[lineKey[curve.group]] = curve.heights[index];
+      });
+    }
+
+    data.push(row);
+  });
 
   reference.forEach((point) =>
     data.push({ age: point.age, band: [point.p3, point.p97], median: point.p50 }),
@@ -109,7 +168,33 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
             dashed
           />
         ) : null}
-        {projection ? <LegendItem color={HEIGHT_COLOR} label="Fortschreibung" dashed /> : null}
+        {projection ? (
+          <LegendItem color={HEIGHT_COLOR} label="Trend (ohne Schubmodell)" dashed />
+        ) : null}
+        {shownTrajectories && activeCurve ? (
+          <LegendItem
+            color={trajectoryColor}
+            label={`Verlauf ${timingLabels[activeCurve.group]} (Schub ca. ${formatAge(activeCurve.impliedPhvAge)})`}
+          />
+        ) : null}
+        {shownTrajectories && !activeCurve
+          ? shownTrajectories.curves.map((curve) => (
+              <LegendItem
+                key={curve.group}
+                color={trajectoryColor}
+                label={`Verlauf wenn ${timingLabels[curve.group]} (Schub ca. ${formatAge(curve.impliedPhvAge)})`}
+              />
+            ))
+          : null}
+        {shownTrajectories && shownTrajectories.curves.length > 1 ? (
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-5 rounded-sm"
+              style={{ background: trajectoryColor, opacity: 0.2 }}
+            />
+            Spanne der passenden Typen
+          </span>
+        ) : null}
         {available.map((prediction) => (
           <LegendItem
             key={prediction.id}
@@ -119,6 +204,28 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
           />
         ))}
       </div>
+
+      {trajectories ? (
+        <div className="mb-3">
+          <CurveToggle
+            checked={visible.has("trajectories")}
+            onChange={(on) => onToggle("trajectories", on)}
+            label="Entwicklungsverlauf nach Typ"
+            description="Verlauf je Entwicklungstyp zur Zielgröße im Diagramm anzeigen"
+            color={trajectoryColor}
+          />
+        </div>
+      ) : trend ? (
+        <div className="mb-3">
+          <CurveToggle
+            checked={visible.has("trend")}
+            onChange={(on) => onToggle("trend", on)}
+            label="Trend ohne Schubmodell"
+            description="Lineare Fortschreibung der aktuellen Wachstumsrate im Diagramm anzeigen"
+            color={HEIGHT_COLOR}
+          />
+        </div>
+      ) : null}
 
       <ComposedChart
         responsive
@@ -173,6 +280,20 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
           isAnimationActive={false}
         />
 
+        {shownTrajectories && shownTrajectories.curves.length > 1 ? (
+          <Area
+            type="monotone"
+            dataKey="typeBand"
+            stroke="none"
+            fill={trajectoryColor}
+            fillOpacity={0.18}
+            connectNulls
+            tooltipType="none"
+            activeDot={false}
+            isAnimationActive={false}
+          />
+        ) : null}
+
         {available.map((prediction) =>
           prediction.range ? (
             <ReferenceArea
@@ -209,8 +330,16 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
             name === "height"
               ? "Größe"
               : name === "projected"
-                ? "Fortschreibung"
-                : "Khamis-Roche-Prognose",
+                ? "Trend"
+                : name === "typeLine"
+                  ? "Verlauf (bekannter Typ)"
+                  : name === "typeEarly"
+                    ? `Verlauf ${timingLabels.early}`
+                    : name === "typeAverage"
+                      ? `Verlauf ${timingLabels.average}`
+                      : name === "typeLate"
+                        ? `Verlauf ${timingLabels.late}`
+                        : "Khamis-Roche-Prognose",
           ]}
           contentStyle={{
             backgroundColor: "var(--color-header)",
@@ -234,6 +363,36 @@ export function GrowthChart({ points, predictions, projection, sex }: GrowthChar
             isAnimationActive={false}
           />
         ) : null}
+
+        {shownTrajectories && activeCurve ? (
+          <Line
+            type="monotone"
+            dataKey="typeLine"
+            stroke={trajectoryColor}
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
+        ) : null}
+
+        {shownTrajectories && !activeCurve
+          ? shownTrajectories.curves.map((curve) => (
+              <Line
+                key={curve.group}
+                type="monotone"
+                dataKey={lineKey[curve.group]}
+                stroke={trajectoryColor}
+                strokeWidth={1.5}
+                strokeDasharray={curve.group === "average" ? undefined : "2 3"}
+                dot={false}
+                activeDot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
+            ))
+          : null}
 
         {projection ? (
           <Line

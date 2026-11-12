@@ -16,6 +16,7 @@ import { ageInYears } from "@/lib/growth/age";
 import { buildReachSamples, type ReachTest } from "@/lib/growth/reach";
 import { PHV_TIMING_THRESHOLDS, classifyPhvTiming, timingLabels } from "@/lib/growth/timing";
 import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
+import { buildTypeTrajectories, type GrowthTrajectories } from "@/lib/growth/trajectory";
 import {
   buildVelocitySeries,
   detectPeak,
@@ -142,7 +143,40 @@ export type GrowthAnalysis = {
   phvEstimate: { age: number; equation: string } | null;
   /** Fortschreibung der Größenkurve (Trend, kein Prognosemodell). */
   projection: ProjectionPoint[] | null;
+  /** Modell, das die Kaskade als verlässlichste Zielgröße auswählt. */
+  primaryPredictionId: PredictionModelId | null;
+  /** Verläufe je Entwicklungstyp zur Zielgröße der Hauptprognose (Sherar-Linse). */
+  trajectories: GrowthTrajectories | null;
 };
+
+/**
+ * Reihenfolge der Zielgrößen-Modelle von der verlässlichsten zur gröbsten
+ * Quelle: Khamis-Roche (Alter ab 4, Größe, Gewicht, beide Eltern), dann die
+ * Elterngröße nach Tanner (auch ohne Gewicht oder unter 4 Jahren), dann
+ * Mirwald/Sherar (ohne Elterndaten). Die erste berechenbare Quelle gewinnt.
+ */
+const PRIMARY_PREDICTION_ORDER: PredictionModelId[] = [
+  "khamis-roche",
+  "mid-parent",
+  "mirwald-sherar",
+];
+
+export function selectPrimaryPrediction(predictions: Prediction[]): PredictionModelId | null {
+  for (const id of PRIMARY_PREDICTION_ORDER) {
+    if (predictions.some((prediction) => prediction.id === id && prediction.value !== null)) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Ab diesem Alter zeigen die Typ-Verläufe etwas: Davor passen alle drei Typen
+ * zur Messung und der Schub liegt zu weit weg, um sie zu unterscheiden. Ein
+ * beobachteter Gipfel hebt die Grenze auf.
+ */
+export const TRAJECTORY_MIN_AGE: Record<GrowthSex, number> = { female: 11, male: 13 };
 
 /** Moore gilt nur rund um die Pubertät sinnvoll. */
 const ESTIMATE_MIN_AGE = 9;
@@ -390,9 +424,14 @@ export function buildGrowthAnalysis(
   predictions.push({
     id: "mirwald-sherar",
     label: "Mirwald/Sherar",
-    description: ms ? `${msBasisText}, ${timingLabels[ms.group]}` : null,
+    description: ms
+      ? `${msBasisText}, ${timingLabels[ms.group]}${
+          ms.source === "observed" ? "" : ". Ohne beobachteten Schub, daher ohne Fehlerbereich"
+        }`
+      : null,
     value: ms?.predictedHeightCm ?? null,
-    range: SHERAR_ERROR_95_CM[sex],
+    // Der Fehlerbereich gilt nur, wenn der Abstand zum Schub aus den Messungen stammt.
+    range: ms?.source === "observed" ? SHERAR_ERROR_95_CM[sex] : null,
     basisDate: ms ? msBasisDate : null,
     missing: msMissing,
   });
@@ -400,6 +439,31 @@ export function buildGrowthAnalysis(
   const phvEstimate =
     maturity && latest && latest.age >= ESTIMATE_MIN_AGE && latest.age <= ESTIMATE_MAX_AGE
       ? { age: maturity.ageAtPhv, equation: maturity.equation }
+      : null;
+
+  const primaryPredictionId = selectPrimaryPrediction(predictions);
+  const primary = predictions.find((prediction) => prediction.id === primaryPredictionId);
+  // Mit gesetzter Entwicklungsverzögerung zählt, wie bei "% erreicht", die Zielgröße mit Entwicklungsalter.
+  const trajectoryTarget =
+    primaryPredictionId === "khamis-roche" && adjustedTarget !== null
+      ? adjustedTarget
+      : (primary?.value ?? null);
+  // Zeigen die Messungen keinen Schub, darf er rechnerisch nicht schon vorbei sein.
+  const spurtUnconfirmed =
+    peak.status !== "confirmed" &&
+    (spurtAhead || timing?.source === "presumed" || profile.maturity_override !== null);
+  const trajectories =
+    latest &&
+    trajectoryTarget !== null &&
+    (peak.status === "confirmed" || latest.age >= TRAJECTORY_MIN_AGE[sex])
+      ? buildTypeTrajectories({
+          sex,
+          age: latest.age,
+          heightCm: latest.height_cm,
+          targetCm: trajectoryTarget,
+          maxOffsetYears: spurtUnconfirmed ? 0 : null,
+          knownGroup: ms && ms.source !== "estimate" ? ms.group : null,
+        })
       : null;
 
   return {
@@ -415,5 +479,7 @@ export function buildGrowthAnalysis(
     velocitySource,
     phvEstimate,
     projection: projectGrowth(points, sex),
+    primaryPredictionId,
+    trajectories,
   };
 }

@@ -68,7 +68,7 @@ export const SHERAR_GROUP_PHV_AGE: Record<GrowthSex, Record<GrowthMaturity, numb
 
 export const SHERAR_MIN_OFFSET = -4;
 export const SHERAR_MAX_OFFSET = 4;
-const SHERAR_STEP = 0.2;
+export const SHERAR_STEP = 0.2;
 
 /** 95-%-Fehlergrenzen laut Sherar et al. (2005) in cm. */
 export const SHERAR_ERROR_95_CM: Record<GrowthSex, number> = { male: 5.35, female: 6.81 };
