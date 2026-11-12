@@ -223,7 +223,7 @@ export function GrowthChart({
           <LegendItem
             key={prediction.id}
             color={predictionColors[prediction.id]}
-            label={`Zielgröße ${prediction.label}: ${formatCm(prediction.value)}`}
+            label={`Zielgröße ${prediction.label}`}
             dashed
           />
         ))}
