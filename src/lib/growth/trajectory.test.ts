@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildGrowthAnalysis, selectPrimaryPrediction } from "@/lib/growth/analysis";
 import { sherarLeftToGrow } from "@/lib/growth/mirwald-sherar";
-import { buildTypeTrajectories, sherarOffsetForLeftToGrow } from "@/lib/growth/trajectory";
+import {
+  buildMirwaldCurve,
+  buildTypeTrajectories,
+  sherarOffsetForLeftToGrow,
+} from "@/lib/growth/trajectory";
 import type { GrowthMeasurement, GrowthProfile } from "@/lib/types";
 
 describe("sherarOffsetForLeftToGrow", () => {
@@ -307,5 +311,76 @@ describe("primary prediction and trajectories in the analysis", () => {
       expect(curve.heights[0]).toBe(162);
       expect(curve.heights.at(-1)).toBeCloseTo(target ?? 0, 5);
     }
+  });
+});
+
+describe("buildMirwaldCurve", () => {
+  const base = {
+    sex: "male",
+    age: 14,
+    heightCm: 165,
+    targetCm: 182,
+    group: "average",
+    offsetYears: -0.4,
+    errorCm: 5.35,
+    maxOffsetYears: 0,
+  } as const;
+
+  it("runs from the last measurement to the target, never falling", () => {
+    const curve = buildMirwaldCurve({ ...base, source: "observed" });
+
+    expect(curve?.ages[0]).toBe(14);
+    expect(curve?.heights[0]).toBe(165);
+    expect(curve?.heights.at(-1)).toBeCloseTo(182, 5);
+    curve?.heights.slice(1).forEach((height, index) => {
+      expect(height).toBeGreaterThanOrEqual((curve.heights[index] ?? 0) - 1e-9);
+    });
+  });
+
+  it("opens the error band from zero at the measurement to the full error at the end", () => {
+    const curve = buildMirwaldCurve({ ...base, source: "observed" });
+    const band = curve?.band;
+
+    expect(band?.kind).toBe("error");
+    expect(band?.lo[0]).toBe(165);
+    expect(band?.hi[0]).toBe(165);
+    expect((band?.hi.at(-1) ?? 0) - (band?.lo.at(-1) ?? 0)).toBeCloseTo(2 * 5.35, 5);
+  });
+
+  it("shows the spread of types, not an error, without an observed spurt", () => {
+    const curve = buildMirwaldCurve({ ...base, source: "group" });
+
+    expect(curve?.band === null || curve?.band.kind === "types").toBe(true);
+    curve?.band?.lo.forEach((lo, index) => {
+      expect(lo).toBeLessThanOrEqual((curve.heights[index] ?? 0) + 1e-9);
+      expect(curve.band?.hi[index] ?? 0).toBeGreaterThanOrEqual(curve.heights[index] - 1e-9);
+    });
+  });
+
+  it("returns null when the target is not above the current height", () => {
+    expect(buildMirwaldCurve({ ...base, targetCm: 165, source: "observed" })).toBeNull();
+  });
+});
+
+describe("mirwaldCurve in the analysis", () => {
+  it("continues a manually set type to the Mirwald/Sherar target", () => {
+    const analysis = buildGrowthAnalysis({ ...boy, maturity_override: "late" }, [
+      measurement({ measured_at: "2025-01-01", height_cm: 152, weight_kg: 40 }),
+      measurement({ measured_at: "2026-02-01", height_cm: 162, weight_kg: 48 }),
+    ]);
+    const target = analysis.predictions.find((p) => p.id === "mirwald-sherar")?.value;
+
+    expect(analysis.mirwaldCurve?.heights[0]).toBe(162);
+    expect(analysis.mirwaldCurve?.heights.at(-1)).toBeCloseTo(target ?? 0, 5);
+    expect(analysis.mirwaldCurve?.band?.kind).not.toBe("error");
+  });
+
+  it("has no curve without a Mirwald/Sherar target", () => {
+    const analysis = buildGrowthAnalysis(boy, [
+      measurement({ measured_at: "2026-02-01", height_cm: 162, weight_kg: 48 }),
+    ]);
+
+    expect(analysis.predictions.find((p) => p.id === "mirwald-sherar")?.value).toBeNull();
+    expect(analysis.mirwaldCurve).toBeNull();
   });
 });

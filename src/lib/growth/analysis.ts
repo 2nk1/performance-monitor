@@ -16,7 +16,12 @@ import { ageInYears } from "@/lib/growth/age";
 import { buildReachSamples, type ReachTest } from "@/lib/growth/reach";
 import { PHV_TIMING_THRESHOLDS, classifyPhvTiming, timingLabels } from "@/lib/growth/timing";
 import { projectGrowth, type ProjectionPoint } from "@/lib/growth/projection";
-import { buildTypeTrajectories, type GrowthTrajectories } from "@/lib/growth/trajectory";
+import {
+  buildMirwaldCurve,
+  buildTypeTrajectories,
+  type GrowthTrajectories,
+  type MirwaldCurve,
+} from "@/lib/growth/trajectory";
 import {
   buildVelocitySeries,
   detectPeak,
@@ -151,6 +156,8 @@ export type GrowthAnalysis = {
   trajectories: GrowthTrajectories | null;
   /** Grund, warum `trajectories` fehlt. */
   trajectoryNote: string | null;
+  /** Verlauf zur Mirwald/Sherar-Zielgröße mit Band. */
+  mirwaldCurve: MirwaldCurve | null;
 };
 
 /**
@@ -374,6 +381,8 @@ export function buildGrowthAnalysis(
   let msBasisText: string | null = null;
   let msBasisLabel: string | null = null;
   let msBasisDate: string | null = msBasis?.measured_at ?? null;
+  // Alter der Messung, auf der Offset und Prognose beruhen (bei der Schätzung evtl. älter als die letzte).
+  let msBasisAge: number | null = msBasis?.age ?? null;
 
   if (msBasis) {
     const base = { sex, age: msBasis.age, heightCm: msBasis.height_cm };
@@ -420,6 +429,7 @@ export function buildGrowthAnalysis(
         msBasisText = `Schub geschätzt ${ms.offsetYears > 0 ? "+" : ""}${formatYears(ms.offsetYears)} J., ${timingLabels[ms.group]}`;
         msBasisLabel = "Schub geschätzt";
         msBasisDate = full.measured_at;
+        msBasisAge = full.age;
       }
     }
   }
@@ -476,6 +486,21 @@ export function buildGrowthAnalysis(
         })
       : null;
 
+  const mirwaldCurve =
+    latest && ms && ms.predictedHeightCm !== null && msBasisAge !== null
+      ? buildMirwaldCurve({
+          sex,
+          age: latest.age,
+          heightCm: latest.height_cm,
+          targetCm: ms.predictedHeightCm,
+          group: ms.group,
+          offsetYears: ms.offsetYears + (latest.age - msBasisAge),
+          source: ms.source,
+          errorCm: SHERAR_ERROR_95_CM[sex],
+          maxOffsetYears: spurtUnconfirmed ? 0 : null,
+        })
+      : null;
+
   // Warum es keinen Verlauf gibt, damit eine leere Fläche im Diagramm nicht rätselhaft bleibt.
   let trajectoryNote: string | null = null;
   if (!trajectories && latest) {
@@ -510,5 +535,6 @@ export function buildGrowthAnalysis(
     primaryPredictionId,
     trajectories,
     trajectoryNote,
+    mirwaldCurve,
   };
 }

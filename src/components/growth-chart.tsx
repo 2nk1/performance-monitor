@@ -15,7 +15,7 @@ import type { CurveKey } from "@/lib/growth/curve-visibility";
 import { referenceCurve } from "@/lib/growth/percentiles";
 import type { ProjectionPoint } from "@/lib/growth/projection";
 import { timingLabels } from "@/lib/growth/timing";
-import type { GrowthTrajectories } from "@/lib/growth/trajectory";
+import type { GrowthTrajectories, MirwaldCurve } from "@/lib/growth/trajectory";
 import type { GrowthSex } from "@/lib/types";
 import { predictionColors } from "@/lib/growth/colors";
 import { getSeriesColor } from "@/lib/series-colors";
@@ -29,6 +29,8 @@ type GrowthChartProps = {
   trajectories: GrowthTrajectories | null;
   /** Grund, warum es keine Typ-Verläufe gibt. */
   trajectoryNote: string | null;
+  /** Verlauf zur Mirwald/Sherar-Zielgröße mit Band. */
+  mirwaldCurve: MirwaldCurve | null;
   /** Modell, an dessen Zielgröße die Typ-Verläufe enden. */
   primaryId: PredictionModelId | null;
   sex: GrowthSex;
@@ -45,6 +47,7 @@ export function GrowthChart({
   projection: trend,
   trajectories,
   trajectoryNote,
+  mirwaldCurve,
   primaryId,
   sex,
   visible,
@@ -69,6 +72,14 @@ export function GrowthChart({
   // Die lineare Fortschreibung ist nur der Rückfall, wenn es keine Typ-Verläufe gibt.
   const projection = !trajectories && visible.has("trend") ? trend : null;
   const shownTrajectories = trajectories && visible.has("trajectories") ? trajectories : null;
+  // Ist Mirwald/Sherar die Hauptquelle, deckt sich seine Kurve mit dem Typ-Verlauf: nur einmal zeichnen.
+  const shownMirwald =
+    mirwaldCurve &&
+    visible.has("mirwald-sherar") &&
+    !(primaryId === "mirwald-sherar" && shownTrajectories)
+      ? mirwaldCurve
+      : null;
+  const mirwaldColor = predictionColors["mirwald-sherar"];
   const trajectoryColor = predictionColors[primaryId ?? "khamis-roche"];
 
   const xMin = Math.floor(points[0].age) - 0.5;
@@ -77,6 +88,7 @@ export function GrowthChart({
     Math.ceil(latest.age) + 1,
     Math.ceil(projection?.at(-1)?.age ?? 0) + 0.5,
     Math.ceil(shownTrajectories?.ages.at(-1) ?? 0) + 0.5,
+    Math.ceil(shownMirwald?.ages.at(-1) ?? 0) + 0.5,
   );
 
   const reference = referenceCurve(sex, xMin, xMax);
@@ -87,6 +99,8 @@ export function GrowthChart({
     ...points.flatMap((point) => (point.khamisRoche !== null ? [point.khamisRoche] : [])),
     ...(projection?.map((point) => point.height) ?? []),
     ...(shownTrajectories ? [shownTrajectories.target] : []),
+    ...(shownMirwald ? [...shownMirwald.heights, ...(shownMirwald.band?.lo ?? [])] : []),
+    ...(shownMirwald?.band?.hi ?? []),
     ...available.flatMap((prediction) => [
       prediction.value - (prediction.range ?? 0),
       prediction.value + (prediction.range ?? 0),
@@ -108,6 +122,9 @@ export function GrowthChart({
     typeBand?: [number, number];
     /** Verlauf des bekannten Typs. */
     typeLine?: number;
+    /** Mirwald/Sherar-Verlauf und sein Band. */
+    mirwald?: number;
+    mirwaldBand?: [number, number];
     typeEarly?: number;
     typeAverage?: number;
     typeLate?: number;
@@ -142,6 +159,16 @@ export function GrowthChart({
       shownTrajectories.curves.forEach((curve) => {
         row[lineKey[curve.group]] = curve.heights[index];
       });
+    }
+
+    data.push(row);
+  });
+
+  shownMirwald?.ages.forEach((age, index) => {
+    const row: Row = { age, mirwald: shownMirwald.heights[index] };
+
+    if (shownMirwald.band) {
+      row.mirwaldBand = [shownMirwald.band.lo[index], shownMirwald.band.hi[index]];
     }
 
     data.push(row);
@@ -191,6 +218,20 @@ export function GrowthChart({
               />
             ))
           : null}
+        {shownMirwald ? (
+          <LegendItem thin color={mirwaldColor} label="Verlauf Mirwald/Sherar" />
+        ) : null}
+        {shownMirwald?.band ? (
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-5 rounded-sm"
+              style={{ background: mirwaldColor, opacity: 0.2 }}
+            />
+            {shownMirwald.band.kind === "error"
+              ? "Fehlerbereich Mirwald/Sherar (95 %)"
+              : "Spanne der Typen (Mirwald/Sherar)"}
+          </span>
+        ) : null}
         {shownTrajectories && shownTrajectories.curves.length > 1 ? (
           <span className="flex items-center gap-2">
             <span
@@ -288,6 +329,20 @@ export function GrowthChart({
           isAnimationActive={false}
         />
 
+        {shownMirwald?.band ? (
+          <Area
+            type="monotone"
+            dataKey="mirwaldBand"
+            stroke="none"
+            fill={mirwaldColor}
+            fillOpacity={0.12}
+            connectNulls
+            tooltipType="none"
+            activeDot={false}
+            isAnimationActive={false}
+          />
+        ) : null}
+
         {shownTrajectories && shownTrajectories.curves.length > 1 ? (
           <Area
             type="monotone"
@@ -306,7 +361,12 @@ export function GrowthChart({
           prediction.range ? (
             <ReferenceArea
               key={`${prediction.id}-area`}
-              x1={latest.age}
+              // Mit Verlaufsband öffnet sich der Fehlerbereich erst bis zum Ende der Kurve.
+              x1={
+                prediction.id === "mirwald-sherar" && shownMirwald?.band?.kind === "error"
+                  ? shownMirwald.ages.at(-1)
+                  : latest.age
+              }
               x2={xMax}
               y1={prediction.value - prediction.range}
               y2={prediction.value + prediction.range}
@@ -339,15 +399,17 @@ export function GrowthChart({
               ? "Größe"
               : name === "projected"
                 ? "Trend"
-                : name === "typeLine"
-                  ? "Verlauf (bekannter Typ)"
-                  : name === "typeEarly"
-                    ? `Verlauf ${timingLabels.early}`
-                    : name === "typeAverage"
-                      ? `Verlauf ${timingLabels.average}`
-                      : name === "typeLate"
-                        ? `Verlauf ${timingLabels.late}`
-                        : "Khamis-Roche-Prognose",
+                : name === "mirwald"
+                  ? "Verlauf Mirwald/Sherar"
+                  : name === "typeLine"
+                    ? "Verlauf (bekannter Typ)"
+                    : name === "typeEarly"
+                      ? `Verlauf ${timingLabels.early}`
+                      : name === "typeAverage"
+                        ? `Verlauf ${timingLabels.average}`
+                        : name === "typeLate"
+                          ? `Verlauf ${timingLabels.late}`
+                          : "Khamis-Roche-Prognose",
           ]}
           contentStyle={{
             backgroundColor: "var(--color-header)",
@@ -367,6 +429,19 @@ export function GrowthChart({
             strokeDasharray="4 3"
             strokeWidth={1.5}
             dot={{ r: 3, fill: predictionColors["khamis-roche"] }}
+            connectNulls
+            isAnimationActive={false}
+          />
+        ) : null}
+
+        {shownMirwald ? (
+          <Line
+            type="monotone"
+            dataKey="mirwald"
+            stroke={mirwaldColor}
+            strokeWidth={1}
+            dot={false}
+            activeDot={false}
             connectNulls
             isAnimationActive={false}
           />
