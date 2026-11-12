@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { logout } from "@/lib/auth";
 import { queryKeys } from "@/lib/data";
 import { compareModes } from "@/lib/compare-modes";
@@ -22,6 +22,7 @@ function sidebarLinkClass({ isActive }: { isActive: boolean }) {
 export function AppShell({ children }: AppShellProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const isCompareSection = useLocation().pathname.startsWith("/compare");
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -45,7 +46,9 @@ export function AppShell({ children }: AppShellProps) {
           </button>
         </div>
 
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-6 pb-3 md:hidden">
+        {/* Mobile: zwei Hauptbereiche als Tabs; die Vergleichsmodi erscheinen
+            als zweite Zeile, sobald man sich im Vergleich befindet. */}
+        <nav className="mx-auto flex max-w-7xl gap-1 px-6 pb-3 md:hidden">
           <NavLink
             to="/athletes"
             className={({ isActive }) =>
@@ -54,24 +57,32 @@ export function AppShell({ children }: AppShellProps) {
           >
             Athlet:innen
           </NavLink>
-
-          {/* Auf Mobile gibt es keine Sidebar – hier deshalb alle drei
-              Vergleichs-Unteransichten als gleichberechtigte Tabs neben
-              "Athlet:innen", statt eines einzelnen "Vergleich"-Eintrags ohne
-              weiteren Zugriff auf Ranking/Entwicklung. */}
-          {compareModes.map((item) => (
-            <NavLink
-              key={item.mode}
-              to={item.path}
-              end
-              className={({ isActive }) =>
-                `shrink-0 rounded-lg px-3 py-1.5 text-sm ${navLinkClass({ isActive })}`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          <NavLink
+            to="/compare"
+            className={() =>
+              `shrink-0 rounded-lg px-3 py-1.5 text-sm ${navLinkClass({ isActive: isCompareSection })}`
+            }
+          >
+            Vergleich
+          </NavLink>
         </nav>
+
+        {isCompareSection ? (
+          <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-6 pb-3 md:hidden">
+            {compareModes.map((item) => (
+              <NavLink
+                key={item.mode}
+                to={item.path}
+                end
+                className={({ isActive }) =>
+                  `shrink-0 rounded-lg px-3 py-1 text-xs ${navLinkClass({ isActive })}`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        ) : null}
       </header>
 
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-7xl">
@@ -86,10 +97,13 @@ export function AppShell({ children }: AppShellProps) {
               Athlet:innen
             </NavLink>
 
-            {/* Die drei Vergleichs-Unteransichten sind eigene Sidebar-Einträge
-                statt eines Segmented Controls im Content-Bereich – die
-                Sidebar ist bereits die zentrale Navigation der App, ein
-                zweiter Umschalter an anderer Stelle wäre redundant. */}
+            {/* Die Vergleichs-Unteransichten sind eigene Sidebar-Einträge
+                (echte Routen), unter einer Gruppenüberschrift, damit die
+                zwei Ebenen der Navigation sichtbar sind. */}
+            <p className="px-3 pb-1 pt-5 text-xs font-medium uppercase tracking-wide text-foreground/40">
+              Vergleich
+            </p>
+
             {compareModes.map((item) => (
               <NavLink
                 key={item.mode}
