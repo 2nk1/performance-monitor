@@ -103,6 +103,58 @@ describe("buildTypeTrajectories", () => {
   });
 });
 
+describe("continuation for a known type", () => {
+  it("shapes the known type's curve when the exact fit is impossible", () => {
+    // 57 cm Restwachstum bei einem Spätentwickler: mehr als die Tabelle bei −4 Jahren hergibt.
+    const input = {
+      sex: "male",
+      age: 12,
+      heightCm: 140,
+      targetCm: 197,
+      maxOffsetYears: 0,
+      knownGroup: "late",
+      knownOffsetYears: -3.26,
+    } as const;
+    const result = buildTypeTrajectories(input);
+    const curve = result?.curves.find((candidate) => candidate.group === "late");
+
+    expect(result?.activeGroup).toBe("late");
+    expect(curve?.shaped).toBe(true);
+    expect(curve?.heights[0]).toBe(140);
+    expect(curve?.heights.at(-1)).toBeCloseTo(197, 5);
+    curve?.heights.slice(1).forEach((height, index) => {
+      expect(height).toBeGreaterThanOrEqual((curve.heights[index] ?? 0) - 1e-9);
+    });
+  });
+
+  it("stays exact when the type fits", () => {
+    const result = buildTypeTrajectories({
+      sex: "male",
+      age: 14,
+      heightCm: 158,
+      targetCm: 181,
+      maxOffsetYears: 0,
+      knownGroup: "late",
+      knownOffsetYears: -1.26,
+    });
+
+    expect(result?.curves.find((curve) => curve.group === "late")?.shaped).toBe(false);
+  });
+
+  it("does not shape a type without a known offset", () => {
+    expect(
+      buildTypeTrajectories({
+        sex: "male",
+        age: 12,
+        heightCm: 140,
+        targetCm: 197,
+        maxOffsetYears: 0,
+        knownGroup: "late",
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("selectPrimaryPrediction", () => {
   const prediction = (id: string, value: number | null) =>
     ({ id, value }) as Parameters<typeof selectPrimaryPrediction>[0][number];
@@ -213,6 +265,31 @@ describe("primary prediction and trajectories in the analysis", () => {
 
     expect(analysis.latest?.age).toBeLessThan(13);
     expect(analysis.trajectories).toBeNull();
+  });
+
+  it("continues the curve for a manually set type even before the pubertal window", () => {
+    const analysis = buildGrowthAnalysis({ ...boy, maturity_override: "late" }, [
+      measurement({ measured_at: "2024-01-01", height_cm: 140, weight_kg: 32 }),
+      measurement({ measured_at: "2024-09-01", height_cm: 144, weight_kg: 35 }),
+    ]);
+
+    expect(analysis.latest?.age).toBeLessThan(13);
+    expect(analysis.trajectories?.activeGroup).toBe("late");
+    expect(analysis.trajectoryNote).toBeNull();
+  });
+
+  it("explains why there is no trajectory", () => {
+    const young = buildGrowthAnalysis(boy, [
+      measurement({ measured_at: "2024-01-01", height_cm: 140, weight_kg: 32 }),
+      measurement({ measured_at: "2024-09-01", height_cm: 144, weight_kg: 35 }),
+    ]);
+    const noTarget = buildGrowthAnalysis(
+      { ...boy, mother_height_cm: null, father_height_cm: null },
+      [measurement({ measured_at: "2026-02-01", height_cm: 162, weight_kg: 48 })],
+    );
+
+    expect(young.trajectoryNote).toContain("ab 13 Jahren");
+    expect(noTarget.trajectoryNote).toContain("keine Zielgröße");
   });
 
   it("builds trajectories through the last point to the primary target in the window", () => {
