@@ -176,6 +176,7 @@ export function GrowthChart({
         ) : null}
         {shownTrajectories && activeCurve ? (
           <LegendItem
+            thin
             color={trajectoryColor}
             label={`Verlauf ${timingLabels[activeCurve.group]} (Schub ca. ${formatAge(activeCurve.impliedPhvAge)})`}
           />
@@ -183,6 +184,7 @@ export function GrowthChart({
         {shownTrajectories && !activeCurve
           ? shownTrajectories.curves.map((curve) => (
               <LegendItem
+                thin
                 key={curve.group}
                 color={trajectoryColor}
                 label={`Verlauf wenn ${timingLabels[curve.group]} (Schub ca. ${formatAge(curve.impliedPhvAge)})`}
@@ -375,7 +377,7 @@ export function GrowthChart({
             type="monotone"
             dataKey="typeLine"
             stroke={trajectoryColor}
-            strokeWidth={2.5}
+            strokeWidth={1}
             dot={false}
             activeDot={false}
             connectNulls
@@ -390,7 +392,7 @@ export function GrowthChart({
                 type="monotone"
                 dataKey={lineKey[curve.group]}
                 stroke={trajectoryColor}
-                strokeWidth={1.5}
+                strokeWidth={1}
                 strokeDasharray={curve.group === "average" ? undefined : "2 3"}
                 dot={false}
                 activeDot={false}
@@ -429,7 +431,18 @@ export function GrowthChart({
   );
 }
 
-function LegendItem({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
+function LegendItem({
+  color,
+  label,
+  dashed,
+  thin,
+}: {
+  color: string;
+  label: string;
+  dashed?: boolean;
+  /** Dünne Linie für Schätzungen, so dünn wie die Perzentile. */
+  thin?: boolean;
+}) {
   return (
     <span className="flex items-center gap-2">
       <svg width="22" height="8" aria-hidden>
@@ -439,7 +452,7 @@ function LegendItem({ color, label, dashed }: { color: string; label: string; da
           x2="22"
           y2="4"
           stroke={color}
-          strokeWidth="2.5"
+          strokeWidth={thin ? "1" : "2.5"}
           strokeDasharray={dashed ? "5 3" : undefined}
         />
       </svg>
