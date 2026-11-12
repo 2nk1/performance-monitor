@@ -107,6 +107,45 @@ describe("buildTypeTrajectories", () => {
   });
 });
 
+describe("unknown type without an exact fit", () => {
+  it("shows each type's shaped curve to the same target", () => {
+    const result = buildTypeTrajectories({
+      sex: "male",
+      age: 11.6,
+      heightCm: 145,
+      targetCm: 197,
+      maxOffsetYears: 0,
+      knownGroup: null,
+    });
+
+    expect(result?.curves.map((curve) => curve.group)).toEqual(["early", "average", "late"]);
+    expect(result?.activeGroup).toBeNull();
+    for (const curve of result?.curves ?? []) {
+      expect(curve.shaped).toBe(true);
+      expect(curve.heights[0]).toBe(145);
+      expect(curve.heights.at(-1)).toBeCloseTo(197, 5);
+    }
+
+    const [early, , late] = result?.curves ?? [];
+    expect(early.heights[2]).toBeGreaterThan(late.heights[2]);
+  });
+
+  it("never assumes a finished spurt without evidence", () => {
+    const result = buildTypeTrajectories({
+      sex: "male",
+      age: 15,
+      heightCm: 172,
+      targetCm: 183,
+      maxOffsetYears: 0,
+      knownGroup: null,
+    });
+
+    for (const curve of result?.curves ?? []) {
+      expect(15 - curve.impliedPhvAge).toBeLessThanOrEqual(1e-9);
+    }
+  });
+});
+
 describe("continuation for a known type", () => {
   it("shapes the known type's curve when the exact fit is impossible", () => {
     // 57 cm Restwachstum bei einem Spätentwickler: mehr als die Tabelle bei −4 Jahren hergibt.
@@ -261,55 +300,71 @@ describe("primary prediction and trajectories in the analysis", () => {
     expect(analysis.predictions.find((p) => p.id === "mirwald-sherar")?.range).toBeNull();
   });
 
-  it("builds no type trajectories before the pubertal window without an observed peak", () => {
+  const young = [
+    measurement({ measured_at: "2021-01-01", height_cm: 130, weight_kg: 27 }),
+    measurement({ measured_at: "2021-09-01", height_cm: 134, weight_kg: 29 }),
+  ];
+
+  it("builds no type trajectories for a very young child without a known type", () => {
+    const analysis = buildGrowthAnalysis(boy, young);
+
+    expect(analysis.latest?.age).toBeLessThan(10);
+    expect(analysis.modelTrajectories["khamis-roche"]).toBeUndefined();
+    expect(analysis.curveNotes["khamis-roche"]).toContain("ab 10 Jahren");
+  });
+
+  it("continues the curve for a manually set type even for a young child", () => {
+    const analysis = buildGrowthAnalysis({ ...boy, maturity_override: "late" }, young);
+
+    expect(analysis.modelTrajectories["khamis-roche"]?.activeGroup).toBe("late");
+    expect(analysis.curveNotes["khamis-roche"]).toBeUndefined();
+  });
+
+  it("shows how each type would grow before a spurt is known", () => {
     const analysis = buildGrowthAnalysis(boy, [
-      measurement({ measured_at: "2024-01-01", height_cm: 140, weight_kg: 32 }),
-      measurement({ measured_at: "2024-09-01", height_cm: 144, weight_kg: 35 }),
+      measurement({ measured_at: "2023-01-01", height_cm: 140, weight_kg: 32 }),
+      measurement({ measured_at: "2023-08-01", height_cm: 144, weight_kg: 35 }),
     ]);
+    const trajectories = analysis.modelTrajectories["khamis-roche"];
 
-    expect(analysis.latest?.age).toBeLessThan(13);
-    expect(analysis.trajectories).toBeNull();
+    expect(analysis.latest?.age).toBeGreaterThanOrEqual(10);
+    expect(trajectories?.activeGroup).toBeNull();
+    expect(trajectories?.curves.length).toBeGreaterThan(0);
+    for (const curve of trajectories?.curves ?? []) {
+      expect(curve.heights[0]).toBe(144);
+      expect(curve.heights.at(-1)).toBeCloseTo(trajectories?.target ?? 0, 5);
+    }
   });
 
-  it("continues the curve for a manually set type even before the pubertal window", () => {
-    const analysis = buildGrowthAnalysis({ ...boy, maturity_override: "late" }, [
-      measurement({ measured_at: "2024-01-01", height_cm: 140, weight_kg: 32 }),
-      measurement({ measured_at: "2024-09-01", height_cm: 144, weight_kg: 35 }),
-    ]);
-
-    expect(analysis.latest?.age).toBeLessThan(13);
-    expect(analysis.trajectories?.activeGroup).toBe("late");
-    expect(analysis.trajectoryNote).toBeNull();
-  });
-
-  it("explains why there is no trajectory", () => {
-    const young = buildGrowthAnalysis(boy, [
-      measurement({ measured_at: "2024-01-01", height_cm: 140, weight_kg: 32 }),
-      measurement({ measured_at: "2024-09-01", height_cm: 144, weight_kg: 35 }),
-    ]);
+  it("has no trajectories without a target and gives a note for a target below the height", () => {
     const noTarget = buildGrowthAnalysis(
       { ...boy, mother_height_cm: null, father_height_cm: null },
       [measurement({ measured_at: "2026-02-01", height_cm: 162, weight_kg: 48 })],
     );
+    const tooTall = buildGrowthAnalysis(boy, [
+      measurement({ measured_at: "2026-02-01", height_cm: 200, weight_kg: 80 }),
+    ]);
 
-    expect(young.trajectoryNote).toContain("ab 13 Jahren");
-    expect(noTarget.trajectoryNote).toContain("keine Zielgröße");
+    expect(noTarget.modelTrajectories).toEqual({});
+    expect(tooTall.curveNotes["mid-parent"]).toContain("nicht über");
   });
 
-  it("builds trajectories through the last point to the primary target in the window", () => {
+  it("builds a trajectory per target through the last point", () => {
     const analysis = buildGrowthAnalysis(boy, [
       measurement({ measured_at: "2025-01-01", height_cm: 152, weight_kg: 40 }),
       measurement({ measured_at: "2025-07-01", height_cm: 156, weight_kg: 43 }),
       measurement({ measured_at: "2026-02-01", height_cm: 162, weight_kg: 48 }),
     ]);
-    const target = analysis.predictions.find((p) => p.id === analysis.primaryPredictionId)?.value;
 
-    expect(analysis.latest?.age).toBeGreaterThanOrEqual(13);
-    expect(analysis.trajectories).not.toBeNull();
-    expect(analysis.trajectories?.target).toBe(target);
-    for (const curve of analysis.trajectories?.curves ?? []) {
-      expect(curve.heights[0]).toBe(162);
-      expect(curve.heights.at(-1)).toBeCloseTo(target ?? 0, 5);
+    for (const model of ["khamis-roche", "mid-parent"] as const) {
+      const target = analysis.predictions.find((p) => p.id === model)?.value;
+      const trajectories = analysis.modelTrajectories[model];
+
+      expect(trajectories?.target).toBe(target);
+      for (const curve of trajectories?.curves ?? []) {
+        expect(curve.heights[0]).toBe(162);
+        expect(curve.heights.at(-1)).toBeCloseTo(target ?? 0, 5);
+      }
     }
   });
 });

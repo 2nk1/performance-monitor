@@ -7,9 +7,9 @@ import {
 } from "@/lib/growth/curve-visibility";
 
 describe("curve visibility", () => {
-  it("shows the primary prediction and the type trajectories by default", () => {
-    expect([...defaultVisibleCurves("mid-parent")].sort()).toEqual(["mid-parent", "trajectories"]);
-    expect([...defaultVisibleCurves(null)]).toEqual(["trajectories"]);
+  it("shows only the primary prediction by default", () => {
+    expect([...defaultVisibleCurves("mid-parent")]).toEqual(["mid-parent"]);
+    expect([...defaultVisibleCurves(null)]).toEqual([]);
   });
 
   it("uses the default without a parameter and 'nothing' for an empty one", () => {
@@ -18,7 +18,7 @@ describe("curve visibility", () => {
   });
 
   it("ignores unknown entries", () => {
-    expect([...parseVisibleCurves("mid-parent,foo,trend", null)]).toEqual(["mid-parent", "trend"]);
+    expect([...parseVisibleCurves("mid-parent,foo,trend", null)]).toEqual(["mid-parent"]);
   });
 
   it("omits the parameter when the selection equals the default", () => {
@@ -27,7 +27,7 @@ describe("curve visibility", () => {
     expect(serializeVisibleCurves(defaultVisibleCurves(primary), primary)).toBeNull();
     expect(
       serializeVisibleCurves(withCurve(defaultVisibleCurves(primary), "mid-parent", true), primary),
-    ).toBe("khamis-roche,mid-parent,trajectories");
+    ).toBe("khamis-roche,mid-parent");
     expect(serializeVisibleCurves(new Set(), primary)).toBe("");
   });
 
