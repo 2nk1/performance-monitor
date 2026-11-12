@@ -159,7 +159,8 @@ describe("buildGrowthAnalysis with Mirwald/Sherar", () => {
 
     expect(prediction?.basisDate).toBe("2026-01-01");
     expect(prediction?.value).toBeGreaterThan(170);
-    expect(prediction?.range).toBe(5.35);
+    // Abstand zum Schub nur geschätzt: kein Fehlerbereich.
+    expect(prediction?.range).toBeNull();
     expect(prediction?.missing).toEqual([]);
   });
 

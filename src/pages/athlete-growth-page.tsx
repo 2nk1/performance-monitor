@@ -1,6 +1,7 @@
 import { Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { CurveToggle } from "@/components/curve-toggle";
 import { GrowthChart } from "@/components/growth-chart";
 import { GrowthJumpChart } from "@/components/growth-jump-chart";
 import { GrowthVelocityChart } from "@/components/growth-velocity-chart";
@@ -15,6 +16,13 @@ import { formatTestDate } from "@/lib/format";
 import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
 import { formatPercentile, heightPercentile } from "@/lib/growth/percentiles";
 import { predictionColors } from "@/lib/growth/colors";
+import {
+  CURVES_PARAM,
+  parseVisibleCurves,
+  serializeVisibleCurves,
+  withCurve,
+  type CurveKey,
+} from "@/lib/growth/curve-visibility";
 import { buildJumpSeries } from "@/lib/growth/jump";
 import { armSpanRatio } from "@/lib/growth/proportions";
 import { PHV_TIMING_THRESHOLDS, timingLabels } from "@/lib/growth/timing";
@@ -69,6 +77,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function AthleteGrowthPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const participantQuery = useQuery({
     queryKey: queryKeys.participant(id ?? ""),
@@ -146,6 +155,26 @@ export function AthleteGrowthPage() {
       : null;
   const measurementsDesc = analysis ? [...analysis.points].reverse() : [];
 
+  // Welche Kurven im Diagramm stehen, liegt in der URL: per Link teilbar, mit Zurück-Taste
+  // erreichbar. Ohne Parameter gilt der Standard (Hauptprognose und Typ-Verläufe).
+  const primaryId = analysis?.primaryPredictionId ?? null;
+  const visibleCurves = parseVisibleCurves(searchParams.get(CURVES_PARAM), primaryId);
+  const toggleCurve = (key: CurveKey, on: boolean) => {
+    const value = serializeVisibleCurves(withCurve(visibleCurves, key, on), primaryId);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value === null) {
+          next.delete(CURVES_PARAM);
+        } else {
+          next.set(CURVES_PARAM, value);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   return (
     <>
       <header className="mb-8">
@@ -222,10 +251,20 @@ export function AthleteGrowthPage() {
               .map((prediction) => (
                 <Fragment key={prediction.id}>
                   <div
-                    className="rounded-xl border border-card-border bg-card p-5"
+                    className="flex flex-col rounded-xl border border-card-border bg-card p-5"
                     style={{ borderTop: `3px solid ${predictionColors[prediction.id]}` }}
                   >
-                    <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="text-sm text-foreground/60">Zielgröße · {prediction.label}</p>
+                      {prediction.id === analysis.primaryPredictionId ? (
+                        <span
+                          className="rounded-full border border-card-border px-2 py-0.5 text-[11px] text-foreground/70"
+                          title="Verlässlichste Quelle, die sich berechnen lässt: Khamis-Roche vor Elterngröße vor Mirwald/Sherar. Die Typ-Verläufe enden bei dieser Zielgröße."
+                        >
+                          Hauptquelle
+                        </span>
+                      ) : null}
+                    </div>
                     {prediction.value !== null ? (
                       <>
                         <p className="mt-2 text-3xl font-semibold">
@@ -279,6 +318,17 @@ export function AthleteGrowthPage() {
                         <p className="mt-3 text-xs text-foreground/50">{footer}</p>
                       ) : null;
                     })()}
+                    {prediction.value !== null ? (
+                      <div className="mt-auto pt-3">
+                        <CurveToggle
+                          checked={visibleCurves.has(prediction.id as CurveKey)}
+                          onChange={(on) => toggleCurve(prediction.id as CurveKey, on)}
+                          label="Im Diagramm"
+                          description={`Zielgröße ${prediction.label} im Diagramm anzeigen`}
+                          color={predictionColors[prediction.id]}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   {prediction.id === "khamis-roche" ? (
                     <div
@@ -337,13 +387,21 @@ export function AthleteGrowthPage() {
               points={analysis.points}
               predictions={analysis.predictions}
               projection={analysis.projection}
+              trajectories={analysis.trajectories}
+              primaryId={analysis.primaryPredictionId}
               sex={profile.sex}
+              visible={visibleCurves}
+              onToggle={toggleCurve}
             />
             <p className="mt-3 text-xs text-foreground/50">
               Schattiert: Unsicherheit der Prognose (Khamis-Roche 90 %, Elterngröße ±8,5 cm,
-              Mirwald/Sherar 95 %). Khamis-Roche gilt für 4 bis 17,5 Jahre, Mirwald/Sherar bis 4
-              Jahre vor und nach dem Wachstumsschub. Fortschreibung: aktuelle Rate, die linear bis{" "}
-              {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
+              Mirwald/Sherar 95 %, letzteres nur bei beobachtetem Schub). Khamis-Roche gilt für 4
+              bis 17,5 Jahre, Mirwald/Sherar bis 4 Jahre vor und nach dem Wachstumsschub.
+              Entwicklungsverlauf: Verläufe nach Sherar et al. (2005) durch die letzte Messung zur
+              Zielgröße der Hauptquelle. Sie zeigen, wie die Größe wahrscheinlich dorthin kommt,
+              nicht die Unsicherheit der Zielgröße. Das Band spannt alle Typen auf, zu denen die
+              Messung passt. Ohne Typ-Verläufe lässt sich ein Trend zuschalten: aktuelle Rate, die
+              linear bis {profile.sex === "male" ? "19" : "17"} Jahre ausläuft, ohne Modell für den
               Wachstumsschub.
             </p>
           </section>
