@@ -75,7 +75,7 @@ export async function fetchDashboardStats() {
 export async function fetchParticipants(): Promise<Participant[]> {
   const { data, error } = await supabase
     .from("participants")
-    .select("id, name, birth_year, participant_type, active, created_at")
+    .select("id, name, birth_year, birth_date, participant_type, active, created_at")
     .eq("active", true)
     .order("name", { ascending: true });
 
@@ -89,7 +89,7 @@ export async function fetchParticipants(): Promise<Participant[]> {
 export async function fetchParticipantById(id: string): Promise<Participant | null> {
   const { data, error } = await supabase
     .from("participants")
-    .select("id, name, birth_year, participant_type, active, created_at")
+    .select("id, name, birth_year, birth_date, participant_type, active, created_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -206,11 +206,31 @@ export async function fetchComparisonTests(): Promise<ComparisonTest[]> {
 const GROWTH_MEASUREMENT_COLUMNS =
   "id, participant_id, measured_at, height_cm, weight_kg, sitting_height_cm, arm_span_cm, notes, created_at";
 
+/**
+ * Das Geburtsdatum liegt beim Athleten (participants), nicht im Profil. Es wird hier
+ * dazugeladen, damit die Auswertung mit einem Objekt auskommt.
+ */
 export async function fetchGrowthProfile(id: string): Promise<GrowthProfile | null> {
+  type ProfileRow = Omit<GrowthProfile, "birth_date"> & {
+    participants: { birth_date: string | null } | null;
+  };
+
   const { data, error } = await supabase
     .from("growth_profiles")
-    .select(
-      "participant_id, sex, birth_date, mother_height_cm, father_height_cm, maturity_override, maturity_delay_years, created_at, updated_at",
+    .select<string, ProfileRow>(
+      `
+      participant_id,
+      sex,
+      mother_height_cm,
+      father_height_cm,
+      maturity_override,
+      maturity_delay_years,
+      created_at,
+      updated_at,
+      participants!inner (
+        birth_date
+      )
+    `,
     )
     .eq("participant_id", id)
     .maybeSingle();
@@ -219,7 +239,19 @@ export async function fetchGrowthProfile(id: string): Promise<GrowthProfile | nu
     throw new Error(`Wachstumsprofil konnte nicht geladen werden: ${error.message}`);
   }
 
-  return data;
+  if (!data) {
+    return null;
+  }
+
+  const { participants, ...profile } = data;
+
+  if (!participants?.birth_date) {
+    throw new Error(
+      "Für das Wachstumsprofil fehlt das Geburtsdatum. Bitte beim Athleten ergänzen.",
+    );
+  }
+
+  return { ...profile, birth_date: participants.birth_date };
 }
 
 export async function fetchGrowthMeasurementsByParticipant(
@@ -264,8 +296,11 @@ export async function fetchGrowthMeasurement(
  * Messungen ohnehin nach Person gruppiert werden müssen.
  */
 export async function fetchGrowthComparison(): Promise<GrowthComparisonAthlete[]> {
-  type ProfileRow = Pick<GrowthProfile, "participant_id" | "sex" | "birth_date"> & {
-    participants: Pick<Participant, "id" | "name" | "birth_year" | "participant_type" | "active">;
+  type ProfileRow = Pick<GrowthProfile, "participant_id" | "sex"> & {
+    participants: Pick<
+      Participant,
+      "id" | "name" | "birth_year" | "birth_date" | "participant_type" | "active"
+    >;
   };
 
   const [profilesResult, measurementsResult] = await Promise.all([
@@ -275,11 +310,11 @@ export async function fetchGrowthComparison(): Promise<GrowthComparisonAthlete[]
         `
         participant_id,
         sex,
-        birth_date,
         participants!inner (
           id,
           name,
           birth_year,
+          birth_date,
           participant_type,
           active
         )
@@ -309,14 +344,17 @@ export async function fetchGrowthComparison(): Promise<GrowthComparisonAthlete[]
   }
 
   return (profilesResult.data ?? [])
-    .filter((row) => row.participants)
+    .filter(
+      (row): row is typeof row & { participants: { birth_date: string } } =>
+        !!row.participants?.birth_date,
+    )
     .map((row) => ({
       id: row.participant_id,
       name: row.participants.name,
       birth_year: row.participants.birth_year,
       participant_type: row.participants.participant_type,
       sex: row.sex,
-      birth_date: row.birth_date,
+      birth_date: row.participants.birth_date,
       measurements: measurementsByParticipant.get(row.participant_id) ?? [],
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "de"));

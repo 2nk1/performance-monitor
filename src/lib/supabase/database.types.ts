@@ -25,6 +25,7 @@ export type Database = {
           id: string;
           name: string;
           birth_year: number | null;
+          birth_date: string | null;
           participant_type: Database["public"]["Enums"]["participant_type"];
           active: boolean;
           created_at: string;
@@ -33,6 +34,7 @@ export type Database = {
           id?: string;
           name: string;
           birth_year?: number | null;
+          birth_date?: string | null;
           participant_type?: Database["public"]["Enums"]["participant_type"];
           active?: boolean;
           created_at?: string;
@@ -41,6 +43,7 @@ export type Database = {
           id?: string;
           name?: string;
           birth_year?: number | null;
+          birth_date?: string | null;
           participant_type?: Database["public"]["Enums"]["participant_type"];
           active?: boolean;
           created_at?: string;
@@ -90,7 +93,6 @@ export type Database = {
         Row: {
           participant_id: string;
           sex: Database["public"]["Enums"]["growth_sex"];
-          birth_date: string;
           mother_height_cm: number | null;
           father_height_cm: number | null;
           maturity_override: Database["public"]["Enums"]["growth_maturity"] | null;
@@ -101,7 +103,6 @@ export type Database = {
         Insert: {
           participant_id: string;
           sex: Database["public"]["Enums"]["growth_sex"];
-          birth_date: string;
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
           maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
@@ -112,7 +113,6 @@ export type Database = {
         Update: {
           participant_id?: string;
           sex?: Database["public"]["Enums"]["growth_sex"];
-          birth_date?: string;
           mother_height_cm?: number | null;
           father_height_cm?: number | null;
           maturity_override?: Database["public"]["Enums"]["growth_maturity"] | null;
