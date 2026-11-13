@@ -1,7 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchParticipantById, queryKeys } from "@/lib/data";
-import { parseNullableNumber, parseParticipantType, requireString } from "@/lib/forms";
+import {
+  parseNullableNumber,
+  parseOptionalDate,
+  parseParticipantType,
+  requireString,
+} from "@/lib/forms";
 import { updateParticipant } from "@/lib/mutations";
 import { useMutationWithError } from "@/lib/use-mutation-with-error";
 import { NotFoundPage } from "@/pages/not-found-page";
@@ -22,6 +27,7 @@ export function EditAthletePage() {
       const name = requireString(formData.get("name"), "Name");
       const participantType = parseParticipantType(formData.get("participant_type"));
       const birthYear = parseNullableNumber(formData.get("birth_year"));
+      const birthDate = parseOptionalDate(formData.get("birth_date"), "Geburtsdatum");
       const active = formData.get("active") === "on";
 
       if (!id) {
@@ -32,6 +38,7 @@ export function EditAthletePage() {
         name,
         participantType,
         birthYear,
+        birthDate,
         active,
       });
     },
@@ -98,20 +105,36 @@ export function EditAthletePage() {
           />
         </div>
 
-        <div>
-          <label htmlFor="birth_year" className="mb-1 block text-sm font-medium">
-            Jahrgang
-          </label>
-          <input
-            id="birth_year"
-            name="birth_year"
-            type="number"
-            min="1900"
-            max="2100"
-            defaultValue={participant.birth_year ?? ""}
-            className="w-full rounded-lg border border-card-border px-3 py-2"
-          />
-        </div>
+        {participant.birth_date ? (
+          <div>
+            <label htmlFor="birth_date" className="mb-1 block text-sm font-medium">
+              Geburtsdatum
+            </label>
+            <input
+              id="birth_date"
+              name="birth_date"
+              type="date"
+              required
+              defaultValue={participant.birth_date}
+              className="w-full rounded-lg border border-card-border px-3 py-2"
+            />
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="birth_year" className="mb-1 block text-sm font-medium">
+              Jahrgang
+            </label>
+            <input
+              id="birth_year"
+              name="birth_year"
+              type="number"
+              min="1900"
+              max="2100"
+              defaultValue={participant.birth_year ?? ""}
+              className="w-full rounded-lg border border-card-border px-3 py-2"
+            />
+          </div>
+        )}
 
         <div>
           <label htmlFor="participant_type" className="mb-1 block text-sm font-medium">

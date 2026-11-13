@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { NumberField } from "@/components/number-field";
 import { fetchGrowthProfile, fetchParticipantById, queryKeys } from "@/lib/data";
-import { parseGrowthProfileForm } from "@/lib/forms";
-import { saveGrowthProfile } from "@/lib/mutations";
+import { parseGrowthProfileForm, parseOptionalDate } from "@/lib/forms";
+import { saveGrowthProfile, saveParticipantBirthDate } from "@/lib/mutations";
+import { formatTestDate } from "@/lib/format";
 import { useMutationWithError } from "@/lib/use-mutation-with-error";
 import { NotFoundPage } from "@/pages/not-found-page";
 
@@ -11,6 +12,8 @@ export function EditGrowthProfilePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // Hinweis von der Athlet:innen-Seite, falls dort nur das Profil nicht gespeichert werden konnte.
+  const notice = (useLocation().state as { notice?: string } | null)?.notice ?? null;
 
   const participantQuery = useQuery({
     queryKey: queryKeys.participant(id ?? ""),
@@ -30,10 +33,25 @@ export function EditGrowthProfilePage() {
         throw new Error("Fehlende ID.");
       }
 
-      await saveGrowthProfile(id, parseGrowthProfileForm(formData));
+      // Das Geburtsdatum liegt beim Athleten und wird nur abgefragt, solange es fehlt.
+      const birthDate = parseOptionalDate(formData.get("birth_date"), "Geburtsdatum");
+
+      if (!participantQuery.data?.birth_date && !birthDate) {
+        throw new Error("Geburtsdatum fehlt.");
+      }
+
+      const values = parseGrowthProfileForm(formData);
+
+      if (birthDate) {
+        await saveParticipantBirthDate(id, birthDate);
+      }
+
+      await saveGrowthProfile(id, values);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.growthProfile(id ?? "") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.participant(id ?? "") });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.participants });
       await queryClient.invalidateQueries({ queryKey: queryKeys.growthComparison });
       if (id) {
         navigate(`/athletes/${id}/growth`);
@@ -75,6 +93,7 @@ export function EditGrowthProfilePage() {
           {profile ? "Wachstumsprofil bearbeiten" : "Wachstumsprofil anlegen"}
         </h1>
         <p className="mt-2 text-sm text-foreground/60">{participant.name}</p>
+        {notice ? <p className="mt-3 text-sm text-red-400">{notice}</p> : null}
       </header>
 
       <form
@@ -104,22 +123,36 @@ export function EditGrowthProfilePage() {
             </select>
           </div>
 
-          <div>
-            <label htmlFor="birth_date" className="mb-1 block text-sm font-medium">
-              Geburtsdatum
-            </label>
-            <input
-              id="birth_date"
-              name="birth_date"
-              type="date"
-              required
-              defaultValue={
-                profile?.birth_date ??
-                (participant.birth_year ? `${participant.birth_year}-01-01` : undefined)
-              }
-              className="w-full rounded-lg border border-card-border px-3 py-2"
-            />
-          </div>
+          {participant.birth_date ? (
+            <div>
+              <p className="mb-1 text-sm font-medium">Geburtsdatum</p>
+              <p className="px-3 py-2 text-sm">
+                {formatTestDate(participant.birth_date)}{" "}
+                <Link
+                  to={`/athletes/${participant.id}/edit`}
+                  className="text-foreground/60 underline hover:text-foreground"
+                >
+                  ändern
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="birth_date" className="mb-1 block text-sm font-medium">
+                Geburtsdatum
+              </label>
+              <input
+                id="birth_date"
+                name="birth_date"
+                type="date"
+                required
+                defaultValue={
+                  participant.birth_year ? `${participant.birth_year}-01-01` : undefined
+                }
+                className="w-full rounded-lg border border-card-border px-3 py-2"
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2">

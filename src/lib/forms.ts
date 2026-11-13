@@ -58,9 +58,31 @@ export function parsePerformanceTestForm(formData: FormData): PerformanceTestFor
   };
 }
 
+/**
+ * Optionales Datum aus einem `<input type="date">` (JJJJ-MM-TT). Leer ergibt null,
+ * ein ungültiges oder unplausibles Datum einen Fehler.
+ */
+export function parseOptionalDate(value: FormDataEntryValue | null, label: string): string | null {
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
+
+  const date = value.trim();
+  const year = Number(date.slice(0, 4));
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+    throw new Error(`${label} ist kein gültiges Datum.`);
+  }
+
+  if (year < 1900 || year > 2100) {
+    throw new Error(`${label} muss zwischen 1900 und 2100 liegen.`);
+  }
+
+  return date;
+}
+
 export type GrowthProfileFormValues = {
   sex: "male" | "female";
-  birthDate: string;
   motherHeight: number | null;
   fatherHeight: number | null;
   maturityOverride: "early" | "average" | "late" | null;
@@ -96,7 +118,6 @@ export function parseGrowthProfileForm(formData: FormData): GrowthProfileFormVal
 
   return {
     sex,
-    birthDate: requireString(formData.get("birth_date"), "Geburtsdatum"),
     motherHeight: parseNullableNumber(formData.get("mother_height_cm")),
     fatherHeight: parseNullableNumber(formData.get("father_height_cm")),
     maturityOverride: parseMaturityOverride(formData.get("maturity_override")),

@@ -5,20 +5,31 @@ import type {
   PerformanceTestFormValues,
 } from "@/lib/forms";
 
+/**
+ * Mit Geburtsdatum leitet die Datenbank den Jahrgang daraus ab, ohne Datum zählt
+ * der übergebene Jahrgang.
+ */
 export async function createParticipant(input: {
   name: string;
   birthYear: number | null;
+  birthDate: string | null;
   participantType: "athlete" | "reference";
-}) {
-  const { error } = await supabase.from("participants").insert({
-    name: input.name,
-    birth_year: input.birthYear,
-    participant_type: input.participantType,
-  });
+}): Promise<string> {
+  const { data, error } = await supabase
+    .from("participants")
+    .insert({
+      name: input.name,
+      ...(input.birthDate ? { birth_date: input.birthDate } : { birth_year: input.birthYear }),
+      participant_type: input.participantType,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     throw new Error(`Athlet:in konnte nicht gespeichert werden: ${error.message}`);
   }
+
+  return data.id;
 }
 
 export async function updateParticipant(
@@ -26,6 +37,7 @@ export async function updateParticipant(
   input: {
     name: string;
     birthYear: number | null;
+    birthDate: string | null;
     participantType: "athlete" | "reference";
     active: boolean;
   },
@@ -34,7 +46,7 @@ export async function updateParticipant(
     .from("participants")
     .update({
       name: input.name,
-      birth_year: input.birthYear,
+      ...(input.birthDate ? { birth_date: input.birthDate } : { birth_year: input.birthYear }),
       participant_type: input.participantType,
       active: input.active,
     })
@@ -42,6 +54,17 @@ export async function updateParticipant(
 
   if (error) {
     throw new Error(`Athlet:in konnte nicht geändert werden: ${error.message}`);
+  }
+}
+
+export async function saveParticipantBirthDate(participantId: string, birthDate: string) {
+  const { error } = await supabase
+    .from("participants")
+    .update({ birth_date: birthDate })
+    .eq("id", participantId);
+
+  if (error) {
+    throw new Error(`Geburtsdatum konnte nicht gespeichert werden: ${error.message}`);
   }
 }
 
@@ -110,7 +133,6 @@ export async function saveGrowthProfile(participantId: string, input: GrowthProf
   const { error } = await supabase.from("growth_profiles").upsert({
     participant_id: participantId,
     sex: input.sex,
-    birth_date: input.birthDate,
     mother_height_cm: input.motherHeight,
     father_height_cm: input.fatherHeight,
     maturity_override: input.maturityOverride,
