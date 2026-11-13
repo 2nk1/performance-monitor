@@ -13,8 +13,7 @@ import {
   queryKeys,
 } from "@/lib/data";
 import { formatTestDate } from "@/lib/format";
-import { ageInYears, buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
-import { formatPercentile, heightPercentile } from "@/lib/growth/percentiles";
+import { buildGrowthAnalysis, type GrowthAnalysis } from "@/lib/growth/analysis";
 import { predictionColors } from "@/lib/growth/colors";
 import {
   CURVES_PARAM,
@@ -187,8 +186,6 @@ function PredictionTile({
   );
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
-
 export function AthleteGrowthPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -263,10 +260,6 @@ export function AthleteGrowthPage() {
   const profile = profileQuery.data;
   const adjustedPrediction =
     analysis?.predictions.find((prediction) => prediction.id === "khamis-roche-adjusted") ?? null;
-  const currentPercentile =
-    profile && analysis?.latest
-      ? heightPercentile(profile.sex, analysis.latest.age, analysis.latest.height_cm)
-      : null;
   const measurementsDesc = analysis ? [...analysis.points].reverse() : [];
 
   // Welche Kurven im Diagramm stehen, liegt in der URL: per Link teilbar, mit Zurück-Taste
@@ -302,18 +295,6 @@ export function AthleteGrowthPage() {
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Wachstum</h1>
-            <p className="mt-2 text-sm text-foreground/60">
-              {participant.name}
-              {profile
-                ? ` · ${profile.sex === "male" ? "männlich" : "weiblich"} · geb. ${formatTestDate(profile.birth_date)} · ${formatNumber(ageInYears(profile.birth_date, today()))} Jahre`
-                : ""}
-              {profile?.mother_height_cm && profile.father_height_cm
-                ? ` · Eltern ${formatNumber(profile.mother_height_cm)} / ${formatNumber(profile.father_height_cm)} cm`
-                : ""}
-              {currentPercentile !== null
-                ? ` · Größe P${formatPercentile(currentPercentile)} (KiGGS)`
-                : ""}
-            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
