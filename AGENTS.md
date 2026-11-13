@@ -1,9 +1,27 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Performance Monitor
 
-# This is NOT the Next.js you know
+Statische React-SPA (Vite, React Router, TanStack Query) mit Supabase als Backend.
+Das Projekt nutzt **kein** Next.js. Deployment über GitHub Pages (Basis-Pfad `/performance-monitor/`).
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+## Befehle
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+- `npm run dev` – Entwicklungsserver
+- `npm run lint`, `npm run format`, `npm test`, `npm run build` – vor jedem PR ausführen
+- `npm run supabase:types` – Typen aus der lokalen Supabase-Instanz generieren (`--local`)
 
-<!-- END:nextjs-agent-rules -->
+## Struktur
+
+- `src/pages` – Seiten, `src/components` – wiederverwendbare Komponenten
+- `src/lib/data.ts` – Abfragen, `src/lib/mutations.ts` – Schreibzugriffe
+- `src/lib/growth` – Wachstumsauswertung
+- `src/lib/supabase/database.types.ts` – generierte Typen
+- `supabase/migrations` – SQL-Migrationen (Format `YYYYMMDDHHMMSS_name.sql`)
+
+## Datenbankänderungen
+
+Die App wird per GitHub Pages ausgeliefert, die Datenbank separat. Beide ändern sich nie gleichzeitig. Deshalb bei Spalten und Tabellen in zwei Schritten arbeiten (expand/contract):
+
+1. Neue Spalte anlegen und Daten übernehmen, App-Version ausrollen.
+2. Erst danach die alte Spalte in einer eigenen Migration entfernen.
+
+Nie Spalten entfernen, die die live App noch liest. Nach dem Merge den Deploy-Workflow abwarten, bevor der zweite Schritt folgt. Zwei Merges kurz hintereinander können sich im Deploy überholen: dann den Workflow manuell neu starten.
